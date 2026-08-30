@@ -35,6 +35,15 @@
         {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/toyota/gr-86?transmissionTypes=MANUAL"}
       ],
       "note": "Manual GR86 (2.4 boxer)"
+    },
+    {
+      "key": "volvo-xc90",
+      "label": "Volvo XC90 (2025+)",
+      "sources": [
+        {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/volvo/xc90/od-2025"},
+        {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/volvo/xc90?yearFrom=2025"}
+      ],
+      "note": "Current-generation XC90, model year 2025+ (B5 mild-hybrid petrol / T8 plug-in hybrid)"
     }
   ]
 }

@@ -253,12 +253,30 @@ def _toyota_gr86(text: str, _listing: dict) -> dict:
     return {"trim": _first(text, _GR86_TRIM)}
 
 
+_XC90_TRIM = [
+    ("Ultimate", _kw("ultimate")),
+    ("Plus", _kw("plus")),
+    ("Core", _kw("core")),
+    ("Inscription", _kw("inscription")),
+    ("R-Design", _kw("r-design", "r design")),
+    ("Momentum", _kw("momentum")),
+]
+
+
+def _volvo_xc90(text: str, _listing: dict) -> dict:
+    """XC90 B5 (mild-hybrid petrol) vs T8 (plug-in hybrid, marketed as 'Recharge')."""
+    is_phev = bool(re.search(r"\bt8\b|recharge|plug-?in", text, re.I))
+    variant = "T8" if is_phev else "B5"
+    return {"variant": variant, "trim": _first(text, _XC90_TRIM)}
+
+
 # model key -> classifier. Models not listed get only the shared origin facet.
 _CLASSIFIERS = {
     "lexus-lc": _lexus_lc,
     "mazda-mx-5": _mazda_mx5,
     "toyota-supra": _toyota_supra,
     "toyota-gr86": _toyota_gr86,
+    "volvo-xc90": _volvo_xc90,
 }
 
 
@@ -356,6 +374,12 @@ def _selfcheck() -> None:
         "ford-focus", {"title": "Ford z USA", "country": "d", "country_label": "Niemcy"}
     )
     assert u == {"country": "Niemcy", "flag": "🇩🇪"}, u
+
+    # XC90 T8 (Recharge PHEV) vs B5 (mild-hybrid petrol), trim from text.
+    t8 = classify("volvo-xc90", {"title": "Volvo XC90 T8 Recharge Ultimate Bright"})
+    b5 = classify("volvo-xc90", {"title": "Volvo XC90 B5 AWD Plus Dark"})
+    assert t8["variant"] == "T8" and t8["trim"] == "Ultimate", t8
+    assert b5["variant"] == "B5" and b5["trim"] == "Plus", b5
 
     print("facets self-check OK")
 
