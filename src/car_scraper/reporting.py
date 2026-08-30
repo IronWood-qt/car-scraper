@@ -341,6 +341,34 @@ def format_alert_markdown(new: list[dict], drops: list[dict], date: str) -> str:
     return "\n".join(lines)
 
 
+def format_alert_pushover(
+    new: list[dict], drops: list[dict], date: str
+) -> tuple[str, str]:
+    """``(title, message)`` compact plain-text summary for a Pushover push.
+
+    Pushover caps messages at 1024 chars and doesn't render markdown, so this
+    lists at most a handful of items per section and points at the full
+    detail (dashboard / GitHub issue) for the rest.
+    """
+    title = f"🚗 {len(new)} new, {len(drops)} price drop(s) — {date}"
+    lines = []
+    for item in new[:5]:
+        label = item.get("_model_label", item.get("model", ""))
+        price = _money(item.get("current_price") or item.get("price"))
+        lines.append(f"NEW  {label}: {price}")
+    for d in drops[:5]:
+        item = d["listing"]
+        label = item.get("_model_label", item.get("model", ""))
+        old, new_p = d["old_price"], d["new_price"]
+        lines.append(f"DROP {label}: {_money(old)} -> {_money(new_p)}")
+    shown = min(len(new), 5) + min(len(drops), 5)
+    remaining = len(new) + len(drops) - shown
+    if remaining > 0:
+        lines.append(f"...and {remaining} more, see dashboard / GitHub issue")
+    message = "\n".join(lines) or "No details"
+    return title, message[:1024]
+
+
 # --- static HTML -----------------------------------------------------------
 
 _TEMPLATE_PATH = Path(__file__).with_name("report_template.html")
@@ -405,6 +433,17 @@ def _selfcheck() -> None:
     )
     assert "1 new listing" in md and "240 000 zł" in md and "-5.0%" in md, md
     assert _md_escape("Car](evil)") == "Car\\](evil)"
+
+    title, message = format_alert_pushover(
+        new=[{"_model_label": "Supra", "current_price": 240000}],
+        drops=[
+            {"listing": {"_model_label": "LC"}, "old_price": 400000, "new_price": 380000}
+        ],
+        date="2026-06-19",
+    )
+    assert "1 new, 1 price drop" in title, title
+    assert "NEW  Supra: 240 000 zł" in message and "DROP LC:" in message, message
+    assert len(message) <= 1024
 
     # OLS recovers a known linear relation: price = 100000 - 2*mileage(k) + ...
     coef = _ols([[10.0], [20.0], [30.0], [40.0]], [80.0, 60.0, 40.0, 20.0])
