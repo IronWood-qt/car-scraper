@@ -64,9 +64,10 @@ Each target has:
   }
 }
 ```
-(that's the JSON *import* shape / what the Manage Targets form edits as text
-for `sources`/`facets` - it's stored relationally in `targets.db`, key is the
-primary key, see [`src/target_store.py`](src/target_store.py).)
+(that's the JSON *import* shape - the Manage Targets page itself is a proper
+form: add/remove rows for `sources` and for each `facets` rule, not JSON text.
+Stored relationally in `targets.db`, key is the primary key, see
+[`src/target_store.py`](src/target_store.py).)
 
 `sources` may be a single entry or several — listings from every source are
 merged into one data file per `key`, deduplicated by listing id. `site` is
@@ -123,24 +124,41 @@ docker compose up  # -> http://localhost:8501
 ```
 
 A Streamlit app with two pages (sidebar nav): the main dashboard (model/year
-filters, an **origin filter** and **bezwypadkowy/uszkodzony** checkboxes -
-see below, price-over-time charts, a sortable linked table, reading `data/`
-straight off disk) and **🎯 Manage Targets** (add/edit/delete tracked cars -
-see [🎯 Tracked targets](#-tracked-targets) above), backed by `targets.db`.
-Point it at volumes on a home server / NAS and it's a permanent, private web
-dashboard on your own network — nothing about what you track or find ever
-leaves that box. Pair it with a scheduler (cron, systemd timer, etc.) running
-`car-scraper scrape-all` periodically to keep `data/` fresh (scraping itself
-isn't containerized - see [🤖 Scheduling](#-scheduling) below).
+filters, price-over-time charts, a sortable linked table, reading `data/`
+straight off disk) and **🎯 Manage Targets** (add/edit/delete tracked cars,
+form-based, backed by `targets.db` - see [🎯 Tracked
+targets](#-tracked-targets) above). Point it at volumes on a home server /
+NAS and it's a permanent, private web dashboard on your own network —
+nothing about what you track or find ever leaves that box. Pair it with a
+scheduler (cron, systemd timer, etc.) running `car-scraper scrape-all`
+periodically to keep `data/` fresh (scraping itself isn't containerized -
+see [🤖 Scheduling](#-scheduling) below).
 
-Every listing also gets **origin** (country, from otomoto's structured field
-or free text) and **condition** (bezwypadkowy/powypadkowy/uszkodzony, text-
-only - see [`src/facets.py`](src/facets.py)) computed automatically, no
-per-target config needed. otomoto's search results carry no structured
-accident/damage field (only the individual advert page does, which this
-project deliberately doesn't scrape), so condition is a text match against
-the title/description and **a miss means "not mentioned," not "confirmed
-undamaged"** - useful as a quick narrow-down, not as a guarantee.
+Every listing also gets an **origin** (country, from otomoto's structured
+field or free text) and a **condition** (bezwypadkowy/powypadkowy/uszkodzony,
+text-only) column in the table - see [`src/facets.py`](src/facets.py). No
+filter widgets for either by design: narrowing what you *track* belongs in
+the target's search URL, not a runtime filter layered on top of already-
+scraped data - see "Origin filtering" right below. Click a column header to
+sort by it instead. otomoto's search results carry no structured accident/
+damage field (only the individual advert page does, which this project
+deliberately doesn't scrape), so condition is a text match against the
+title/description and **a miss means "not mentioned," not "confirmed
+undamaged"** - useful to eyeball, not a guarantee.
+
+### Origin filtering
+
+Both otomoto and autoplac support filtering by country of origin natively in
+the search URL - narrow what you *scrape* instead of filtering what's
+already scraped. otomoto: append
+`search[filter_enum_country_origin][0]=<code>` (`usa`, `d` for Germany, `f`
+for France, `pl` for Poland, ... - the same codes `src/facets.py`'s
+`_FLAGS` maps to flags); autoplac exposes an equivalent country picker in
+its own UI - copy the resulting URL. Add it straight to the target's source
+URL in Manage Targets, e.g. for USA-only:
+`https://www.otomoto.pl/osobowe/volvo/xc-90/od-2025?search%5Bfilter_enum_country_origin%5D%5B0%5D=usa`
+(verified live: narrows 237 XC90 results down to exactly the USA-imported
+ones).
 
 There's also `car-scraper report`, which writes a self-contained, interactive
 `plots/index.html` (Plotly, no server) plus per-model PNGs under
