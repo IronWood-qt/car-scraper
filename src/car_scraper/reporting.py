@@ -17,7 +17,7 @@ import statistics
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from src.car_scraper.facets import classify
+from src.facets import classify
 from src.target_store import open_default_store
 
 
@@ -60,7 +60,7 @@ def load_target_facets(db_path: str | None = None) -> dict[str, dict]:
     """Return ``{key: facets_config}`` for targets that define a "facets" block.
 
     This is what lets a target's variant/trim/body classification be
-    configured entirely in targets.db - see :func:`car_scraper.facets.classify`
+    configured entirely in targets.db - see :func:`facets.classify`
     and the dashboard's "Manage Targets" page.
     """
     return {

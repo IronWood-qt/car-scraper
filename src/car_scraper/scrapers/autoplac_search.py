@@ -13,7 +13,7 @@ Two quirks vs otomoto:
   to match otomoto.
 - there is no country-of-origin field, only seller location — which is not the
   same thing — so ``country`` is left empty and origin is derived downstream by
-  the text/Poland-default heuristic in :mod:`car_scraper.facets`.
+  the text/Poland-default heuristic in :mod:`facets`.
 """
 
 import json
