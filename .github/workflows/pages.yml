@@ -1,10 +1,11 @@
 name: 🌐 Redeploy dashboard to Pages
 
-# Manual fallback: rebuilds plots/ from the data/ already committed on main
-# and redeploys it to Pages. The daily-scrape workflow does this same
-# build-and-deploy automatically after every scrape, so this is only needed
-# to force a redeploy without waiting for (or triggering) a new scrape - e.g.
-# after changing report_template.html or the Pages site settings.
+# Legacy / manual-only: project direction is a self-hosted dashboard
+# (docker-compose, see README/dashboard/), so data/ is gitignored now and a
+# fresh CI checkout has none - this produces an empty dashboard unless
+# daily-scrape.yml's manual run just populated data/ earlier in the same
+# job (it doesn't persist between separate workflow runs either). Kept for
+# reference; the self-hosted app is the real deployment path.
 
 on:
   workflow_dispatch:

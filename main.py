@@ -339,9 +339,8 @@ def scrape_all(targets_file: str, data_dir: str, max_pages: int, alerts_file: st
             f"\n📣 {len(all_new)} new, {len(all_drops)} price drops → {alerts_file}"
         )
         title, message = format_alert_pushover(all_new, all_drops, current_date)
-        dashboard_url = os.environ.get(
-            "DASHBOARD_URL", "https://ironwood-qt.github.io/car-scraper/"
-        )
+        # No sensible default: your dashboard is wherever you self-host it.
+        dashboard_url = os.environ.get("DASHBOARD_URL")
         if send_pushover(title, message, url=dashboard_url, url_title="Open dashboard"):
             click.echo("🔔 Pushover notification sent")
     else:
