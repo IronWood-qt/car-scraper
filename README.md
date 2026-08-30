@@ -65,11 +65,14 @@ dashboard, entirely from config — no code needed for a new car. Each
 dimension (`variant` / `trim` / `body`, all optional) is an ordered list of
 `{label, keywords}` rules checked top to bottom; the first whose keywords
 appear (whole-word, case-insensitive) in the listing's title/description
-wins, so put more specific labels first. `targets.example.json` has a second
-worked example. A handful of the originally-tracked models (Lexus LC, Mazda
-MX-5, Toyota Supra/GR86) instead have their facet logic hardcoded in
-[`facets.py`](src/car_scraper/facets.py) from before this config existed —
-new targets don't need that, `facets` in `targets.json` covers it.
+wins, so put more specific labels first. `targets.example.json` has a real,
+working second example (Lexus LC's actual V8/hybrid + trim split, purely as
+config) you can scrape as-is. A handful of the originally-tracked models
+(Lexus LC, Mazda MX-5, Toyota Supra/GR86) also have their facet logic
+hardcoded in [`facets.py`](src/car_scraper/facets.py) from before this config
+existed — new targets don't need that, `facets` in `targets.json` covers it;
+if a target's own JSON has a `facets` block it always wins over any hardcoded
+classifier for that key.
 
 ### CI: the `TARGETS_JSON` secret
 
