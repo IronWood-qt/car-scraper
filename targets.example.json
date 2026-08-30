@@ -1,0 +1,31 @@
+{
+  "_comment": "Copy this file to targets.json (gitignored, never committed - see README) and edit freely. Each entry below documents one part of the schema.",
+  "targets": [
+    {
+      "key": "make-model",
+      "label": "Human-readable name shown in the dashboard/alerts",
+      "sources": [
+        {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/<make>/<model>?<filters>"},
+        {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/<make>/<model>?<filters>"}
+      ],
+      "note": "optional: what the filters mean, for your own future reference"
+    },
+    {
+      "key": "make-model-with-facets",
+      "label": "A target that also splits into powertrain/trim filter chips",
+      "sources": [
+        {"url": "https://www.otomoto.pl/osobowe/<make>/<model>"}
+      ],
+      "facets": {
+        "variant": [
+          {"label": "Powertrain A", "keywords": ["keyword", "another keyword"]},
+          {"label": "Powertrain B", "keywords": ["keyword"]}
+        ],
+        "trim": [
+          {"label": "Top trim", "keywords": ["top trim name"]},
+          {"label": "Base trim", "keywords": ["base trim name"]}
+        ]
+      }
+    }
+  ]
+}

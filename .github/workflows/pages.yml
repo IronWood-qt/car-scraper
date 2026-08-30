@@ -44,6 +44,18 @@ jobs:
       - name: 🔄 Install dependencies
         run: poetry install --no-interaction --no-ansi
 
+      # targets.json is gitignored (private, not project config) - see README.
+      - name: 🔐 Write targets.json from secret
+        env:
+          TARGETS_JSON: ${{ secrets.TARGETS_JSON }}
+        run: |
+          if [ -z "$TARGETS_JSON" ]; then
+            echo "::error::TARGETS_JSON secret is not set - see README for setup"
+            exit 1
+          fi
+          printf '%s' "$TARGETS_JSON" > targets.json
+          python -c "import json; json.load(open('targets.json'))"
+
       - name: 📊 Generate PNG plots + static dashboard
         run: |
           for key in $(python -c "import json;print(' '.join(t['key'] for t in json.load(open('targets.json'))['targets']))"); do

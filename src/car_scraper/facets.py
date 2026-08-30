@@ -253,50 +253,66 @@ def _toyota_gr86(text: str, _listing: dict) -> dict:
     return {"trim": _first(text, _GR86_TRIM)}
 
 
-_XC90_TRIM = [
-    ("Ultimate", _kw("ultimate")),
-    ("Ultra", _kw("ultra")),
-    ("Plus", _kw("plus")),
-    ("Core", _kw("core")),
-    ("Inscription", _kw("inscription")),  # pre-facelift (2015-2024) naming
-    ("R-Design", _kw("r-design", "r design")),  # pre-facelift naming
-    ("Momentum", _kw("momentum")),  # pre-facelift naming
-]
-
-_XC90_VARIANT = [
-    ("T8", _kw("t8", "recharge")),  # plug-in hybrid
-    ("B6", _kw("b6")),  # mild-hybrid petrol, higher output
-    ("B5", _kw("b5")),  # mild-hybrid petrol
-]
-
-
-def _volvo_xc90(text: str, _listing: dict) -> dict:
-    """XC90 powertrain (B5/B6 mild-hybrid petrol, T8 plug-in 'Recharge') + trim."""
-    return {"variant": _first(text, _XC90_VARIANT), "trim": _first(text, _XC90_TRIM)}
-
-
-# model key -> classifier. Models not listed get only the shared origin facet.
+# model key -> classifier. Models not listed fall back to the config-driven
+# engine below (or, absent config, get only the shared origin facet).
 _CLASSIFIERS = {
     "lexus-lc": _lexus_lc,
     "mazda-mx-5": _mazda_mx5,
     "toyota-supra": _toyota_supra,
     "toyota-gr86": _toyota_gr86,
-    "volvo-xc90": _volvo_xc90,
 }
 
+_CONFIG_DIMENSIONS = ("variant", "trim", "body")
 
-def classify(model_key: str, listing: dict) -> dict:
+
+def _config_pattern(keywords: list[str]) -> re.Pattern[str]:
+    """Case-insensitive whole word/phrase alternation from plain keyword strings.
+
+    Keywords are literal text (not regex) - a user writing ``targets.json``
+    shouldn't need to know regex syntax or escape anything.
+    """
+    return _kw(*(re.escape(w) for w in keywords))
+
+
+def _classify_from_config(text: str, config: dict) -> dict:
+    """Build variant/trim/body facets from a target's ``"facets"`` config.
+
+    Shape (each dimension optional): ``{"variant": [{"label": "T8",
+    "keywords": ["t8", "recharge"]}, ...], "trim": [...], "body": [...]}``.
+    Rules are checked in order - the first whose keywords match wins, so put
+    more specific labels first. This is what lets a target be tracked with no
+    code changes: see ``targets.example.json``.
+    """
+    facets: dict = {}
+    for dimension in _CONFIG_DIMENSIONS:
+        rules = config.get(dimension) or []
+        pairs = [
+            (rule["label"], _config_pattern(rule["keywords"]))
+            for rule in rules
+            if rule.get("label") and rule.get("keywords")
+        ]
+        if pairs:
+            facets[dimension] = _first(text, pairs)
+    return facets
+
+
+def classify(model_key: str, listing: dict, config: dict | None = None) -> dict:
     """Return facet values for one listing.
 
-    Always includes ``country`` (display label) + ``flag``; model-specific
-    classifiers add ``variant`` / ``body`` / ``trim`` where they apply. Values
-    that can't be determined are ``None`` and simply produce no chip.
+    Always includes ``country`` (display label) + ``flag``. Model-specific
+    ``variant`` / ``body`` / ``trim`` come from ``config`` (a target's
+    ``"facets"`` block in ``targets.json``) when given; otherwise from a
+    hardcoded classifier for the handful of models built in above, if any.
+    Values that can't be determined are ``None`` and simply produce no chip.
     """
     text = " ".join(
         str(listing.get(k) or "") for k in ("title", "version", "short_description")
     )
-    fn = _CLASSIFIERS.get(model_key)
-    facets: dict = fn(text, listing) if fn else {}
+    if config:
+        facets: dict = _classify_from_config(text, config)
+    else:
+        fn = _CLASSIFIERS.get(model_key)
+        facets = fn(text, listing) if fn else {}
     label, code = _resolve_country(text, listing)
     facets["country"] = label
     facets["flag"] = country_flag(code)
@@ -380,15 +396,42 @@ def _selfcheck() -> None:
     )
     assert u == {"country": "Niemcy", "flag": "🇩🇪"}, u
 
-    # XC90 powertrain + trim, matching real otomoto listing titles.
+    # Config-driven engine (no hardcoded classifier needed): a target's
+    # targets.json "facets" block drives variant/trim, matching real otomoto
+    # listing titles - this is how any car gets tracked with zero code changes.
+    xc90_config = {
+        "variant": [
+            {"label": "T8", "keywords": ["t8", "recharge"]},
+            {"label": "B6", "keywords": ["b6"]},
+            {"label": "B5", "keywords": ["b5"]},
+        ],
+        "trim": [
+            {"label": "Ultimate", "keywords": ["ultimate"]},
+            {"label": "Ultra", "keywords": ["ultra"]},
+            {"label": "Plus", "keywords": ["plus"]},
+            {"label": "Core", "keywords": ["core"]},
+        ],
+    }
     t8 = classify(
-        "volvo-xc90", {"title": "Volvo XC 90 T8 AWD Plug-In Hybrid Ultra Dark 7os"}
+        "volvo-xc90",
+        {"title": "Volvo XC 90 T8 AWD Plug-In Hybrid Ultra Dark 7os"},
+        config=xc90_config,
     )
-    b6 = classify("volvo-xc90", {"title": "Volvo XC 90 B6 B AWD Ultimate Bright 7os"})
-    b5 = classify("volvo-xc90", {"title": "Volvo XC 90 B5 B AWD Plus Bright"})
+    b6 = classify(
+        "volvo-xc90",
+        {"title": "Volvo XC 90 B6 B AWD Ultimate Bright 7os"},
+        config=xc90_config,
+    )
+    b5 = classify(
+        "volvo-xc90", {"title": "Volvo XC 90 B5 B AWD Plus Bright"}, config=xc90_config
+    )
     assert t8["variant"] == "T8" and t8["trim"] == "Ultra", t8
     assert b6["variant"] == "B6" and b6["trim"] == "Ultimate", b6
     assert b5["variant"] == "B5" and b5["trim"] == "Plus", b5
+
+    # Unknown model, no config -> only the shared origin facet, no crash.
+    plain = classify("some-random-model", {"title": "Ford Fiesta 1.0"})
+    assert plain == {"country": "Polska", "flag": "🇵🇱"}, plain
 
     print("facets self-check OK")
 

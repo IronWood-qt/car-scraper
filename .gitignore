@@ -193,3 +193,8 @@ data/alerts.md
 # full-render PNGs committed daily were the reason .git ballooned to ~390MB
 # over 15 months (see the "chore: squash history to shrink repo" commit).
 /plots/
+
+# Which cars you're tracking is private, not project config: never committed.
+# Copy targets.example.json -> targets.json and edit freely. CI gets its copy
+# from the TARGETS_JSON repo secret instead (see README).
+/targets.json

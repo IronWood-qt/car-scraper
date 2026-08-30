@@ -32,24 +32,52 @@ def _money(n) -> str:
         return "—"
 
 
-def load_targets(targets_file: str = "targets.json") -> dict[str, str]:
-    """Return ``{key: label}`` from targets.json (empty if missing)."""
+def _load_targets_list(targets_file: str) -> list[dict]:
+    """Raw ``targets`` array from targets.json (empty if missing/invalid).
+
+    targets.json is gitignored (never committed - see README) so it may
+    simply not exist, e.g. in a fresh checkout without the secret/local file
+    set up yet; that's not an error, just an empty target list.
+    """
     path = Path(targets_file)
     if not path.exists():
-        return {}
+        return []
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return {t["key"]: t.get("label", t["key"]) for t in data.get("targets", [])}
-    except (json.JSONDecodeError, KeyError):
-        return {}
+        return json.loads(path.read_text(encoding="utf-8")).get("targets", [])
+    except json.JSONDecodeError:
+        return []
+
+
+def load_targets(targets_file: str = "targets.json") -> dict[str, str]:
+    """Return ``{key: label}`` from targets.json (empty if missing)."""
+    return {
+        t["key"]: t.get("label", t["key"])
+        for t in _load_targets_list(targets_file)
+        if t.get("key")
+    }
+
+
+def load_target_facets(targets_file: str = "targets.json") -> dict[str, dict]:
+    """Return ``{key: facets_config}`` for targets that define a "facets" block.
+
+    This is what lets a target's variant/trim/body classification be
+    configured entirely in targets.json - see :func:`car_scraper.facets.classify`
+    and ``targets.example.json``.
+    """
+    return {
+        t["key"]: t["facets"]
+        for t in _load_targets_list(targets_file)
+        if t.get("key") and t.get("facets")
+    }
 
 
 def load_models(data_dir: str, targets_file: str = "targets.json") -> list[dict]:
     """Load every model's listings from ``data_dir``.
 
-    Each item: ``{"key", "label", "listings": [listing, ...]}``.
+    Each item: ``{"key", "label", "listings": [listing, ...], "facets_config"}``.
     """
     labels = load_targets(targets_file)
+    facets_configs = load_target_facets(targets_file)
     base = Path(data_dir)
     models: list[dict] = []
     if not base.exists():
@@ -79,6 +107,7 @@ def load_models(data_dir: str, targets_file: str = "targets.json") -> list[dict]
                 "key": model_dir.name,
                 "label": labels.get(model_dir.name, model_dir.name),
                 "listings": listings,
+                "facets_config": facets_configs.get(model_dir.name),
             }
         )
     return models
@@ -270,11 +299,12 @@ def _prep_model(model: dict) -> dict:
     listings = model["listings"]
     _deal_scores(listings)
     key = model["key"]
+    facets_config = model.get("facets_config")
 
     def slim(listing):
         out = {k: listing.get(k) for k in _KEEP}
         out["active"] = _active(listing)
-        out["facets"] = classify(key, listing)
+        out["facets"] = classify(key, listing, config=facets_config)
         return out
 
     slimmed = [slim(car) for car in listings]

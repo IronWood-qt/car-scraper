@@ -39,6 +39,20 @@ jobs:
     - name: 🔄 Install dependencies
       run: poetry install --no-interaction --no-ansi
 
+    # targets.json is gitignored (which cars you track is private, not
+    # project config - see .gitignore / README) so checkout never has it.
+    # Materialize it here from a repo secret instead.
+    - name: 🔐 Write targets.json from secret
+      env:
+        TARGETS_JSON: ${{ secrets.TARGETS_JSON }}
+      run: |
+        if [ -z "$TARGETS_JSON" ]; then
+          echo "::error::TARGETS_JSON secret is not set - see README for setup"
+          exit 1
+        fi
+        printf '%s' "$TARGETS_JSON" > targets.json
+        python -c "import json; json.load(open('targets.json'))"  # fail fast on bad JSON
+
     - name: 🔍 Scrape all targets
       env:
         PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
