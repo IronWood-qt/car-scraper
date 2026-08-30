@@ -195,9 +195,16 @@ data/alerts.md
 /plots/
 
 # Which cars you're tracking is private, not project config: never committed.
-# Copy targets.example.json -> targets.json and edit freely. CI gets its copy
-# from the TARGETS_JSON repo secret instead (see README).
+# targets.db (SQLite) is the editable source of truth - edit it via the
+# dashboard's "Manage Targets" page, or `car-scraper targets` on the CLI.
+# targets.json is legacy/import-only now (targets.example.json is still a
+# real file you can import as a starting point). CI gets its copy of the DB
+# content from the TARGETS_JSON repo secret instead (see README).
 /targets.json
+/targets.db
+/targets.db-journal
+/targets.db-wal
+/targets.db-shm
 
 # Scraped listings/prices are private too - never committed, in CI or
 # locally. This repo ships code only; the actual data lives wherever you run
