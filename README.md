@@ -308,7 +308,7 @@ car-scraper/
 │       ├── plotters/              # Visualization modules
 │       └── utils/                 # Utilities and helpers
 ├── dashboard/                  # Streamlit web UI (standalone container - see dashboard/Dockerfile)
-│   ├── app.py                     # Main page: browse listings/charts
+│   ├── 🚗_Dashboard.py             # Main page: browse listings/charts
 │   └── pages/
 │       └── 1_🎯_Manage_Targets.py    # Add/edit/delete targets
 ├── data/                      # Model-specific data storage (gitignored, not committed)

@@ -4,8 +4,8 @@ Standalone on purpose: reads data/<model>/<model>.json directly and only
 imports src/target_store.py (stdlib-only) for the target list/labels, so the
 container needs streamlit + plotly + pandas and nothing from the scraper
 package's own (much heavier) dependencies. Run locally with `docker compose
-up` (see docker-compose.yml) or `streamlit run dashboard/app.py`. See also
-pages/ for the "Manage Targets" editor.
+up` (see docker-compose.yml) or `streamlit run dashboard/🚗_Dashboard.py`. See
+also pages/ for the "Manage Targets" editor.
 """
 
 import json
@@ -54,8 +54,8 @@ def load_model(key: str) -> pd.DataFrame:
     return pd.DataFrame(listings)
 
 
-def models() -> list:
-    """List model keys that have a data file under DATA_DIR."""
+def models_with_data() -> list:
+    """List model keys that have a data file under DATA_DIR (tracked or not)."""
     if not DATA_DIR.exists():
         return []
     return sorted(
@@ -69,9 +69,21 @@ st.set_page_config(page_title="Car Tracker", page_icon="🚗", layout="wide")
 st.title("🚗 Car Tracker")
 
 labels = load_labels()
-available = models()
+with_data = models_with_data()
+# Only currently-tracked targets, not every model that ever left data behind -
+# removing a target in Manage Targets should hide it here too. Old data/
+# stays on disk untouched (in case the target comes back) - see stale below.
+available = [m for m in with_data if m in labels]
+stale = [m for m in with_data if m not in labels]
+if stale:
+    st.sidebar.caption(
+        f"{len(stale)} untracked model(s) still have data on disk: {', '.join(stale)}"
+    )
 if not available:
-    st.warning(f"No data found in {DATA_DIR.resolve()}. Run the scraper first.")
+    if not labels:
+        st.warning("No targets tracked yet - add one on the Manage Targets page.")
+    else:
+        st.warning(f"No data found in {DATA_DIR.resolve()} yet. Run the scraper first.")
     st.stop()
 
 key = st.sidebar.selectbox("Model", available, format_func=lambda k: labels.get(k, k))

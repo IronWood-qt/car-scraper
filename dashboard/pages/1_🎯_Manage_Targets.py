@@ -1,8 +1,8 @@
 """Manage Targets: add/edit/delete tracked cars, stored in targets.db.
 
-Replaces hand-editing targets.json. Same sys.path setup as app.py - see the
-comment there for why (must mirror dashboard/'s position relative to src/ in
-dashboard/Dockerfile too).
+Replaces hand-editing targets.json. Same sys.path setup as 🚗_Dashboard.py -
+see the comment there for why (must mirror dashboard/'s position relative to
+src/ in dashboard/Dockerfile too).
 """
 
 import json
@@ -29,7 +29,7 @@ store = open_default_store(DB_PATH)
 
 
 def _clear_dashboard_cache() -> None:
-    """Bust app.py's cached label lookup so edits show up immediately."""
+    """Bust 🚗_Dashboard.py's cached label lookup so edits show up immediately."""
     st.cache_data.clear()
 
 
