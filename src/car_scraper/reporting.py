@@ -437,7 +437,11 @@ def _selfcheck() -> None:
     title, message = format_alert_pushover(
         new=[{"_model_label": "Supra", "current_price": 240000}],
         drops=[
-            {"listing": {"_model_label": "LC"}, "old_price": 400000, "new_price": 380000}
+            {
+                "listing": {"_model_label": "LC"},
+                "old_price": 400000,
+                "new_price": 380000,
+            }
         ],
         date="2026-06-19",
     )
