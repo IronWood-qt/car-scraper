@@ -137,25 +137,10 @@ if "year" in df.columns and df["year"].notna().any():
         lo, hi = st.sidebar.slider("Year", ylo, yhi, (ylo, yhi))
         df = df[df["year"].between(lo, hi)]
 
-# Origin + accident/damage filters - text-derived (see src/facets.py), so a
-# miss means "not mentioned" rather than "confirmed negative"; the checkboxes
-# below only ever *hide* a positive match, never assume absence either way.
-if "country" in df.columns and df["country"].notna().any():
-    countries = sorted(df["country"].dropna().unique())
-    picked = st.sidebar.multiselect("Origin", countries, default=countries)
-    df = df[df["country"].isin(picked)]
-if (
-    "accident_free" in df.columns
-    and (df["accident_free"] == True).any()  # noqa: E712
-    and st.sidebar.checkbox("Bezwypadkowy only")
-):
-    df = df[df["accident_free"] == True]  # noqa: E712
-if (
-    "damaged" in df.columns
-    and (df["damaged"] == True).any()  # noqa: E712
-    and st.sidebar.checkbox("Hide uszkodzony")
-):
-    df = df[df["damaged"] != True]  # noqa: E712
+# No origin/condition filter widgets by design: filtering what you track
+# belongs in the target's search URL (config), not a runtime UI layer on top
+# of already-scraped data - see "Origin filtering" in README. origin/
+# condition are still columns below, sortable by clicking the header.
 
 if df.empty:
     st.info("No listings match the current filters.")
