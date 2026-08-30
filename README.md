@@ -1,6 +1,6 @@
 # 🚗 Car Scraper for Otomoto.pl
 
-[![Daily Scraper](https://github.com/simonloach/car-scraper/actions/workflows/daily-scrape.yml/badge.svg)](https://github.com/simonloach/car-scraper/actions/workflows/daily-scrape.yml)
+[![Daily Scraper](https://github.com/IronWood-qt/car-scraper/actions/workflows/daily-scrape.yml/badge.svg)](https://github.com/IronWood-qt/car-scraper/actions/workflows/daily-scrape.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Poetry](https://img.shields.io/badge/dependency--management-poetry-blue)](https://python-poetry.org/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -20,27 +20,63 @@ search URL so only the exact variant is tracked:
 | `lexus-lc` | Lexus **LC 500** (V8, NA) | power ≥ 475 KM — excludes the LC 500h V6 hybrid |
 | `mazda-mx-5` | Mazda **MX-5** | manual gearbox, power ≥ 180 KM (2.0 Skyactiv) |
 | `toyota-supra` | Toyota **Supra** (B58) | manual, engine ≥ 2900 cm³, from 2018 |
+| `toyota-gr86` | Toyota **GR86** | manual (2.4 boxer) |
+| `volvo-xc90` | Volvo **XC90** | model year 2025+ (current generation, B5 / T8) |
 
-Add a target by appending `{key, label, url}` to `targets.json`.
+Add a target by appending an entry to `targets.json`. Each target is:
+
+```json
+{
+  "key": "make-model",
+  "label": "Human-readable name shown in the dashboard/alerts",
+  "sources": [
+    {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/<make>/<model>?<filters>"},
+    {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/<make>/<model>?<filters>"}
+  ],
+  "note": "optional: what the filters mean"
+}
+```
+
+`sources` may be a single entry or several — listings from every source are
+merged into one data file per `key`, deduplicated by listing id. `site` is
+just documentation; the scraper is actually picked per-URL by domain, so any
+otomoto.pl / autoplac.pl search URL works. A bare `{"url": "..."}` (no
+`sources` array) also still works for a single-source target. Useful filter
+patterns: otomoto takes a model-year floor as a path segment
+(`/od-2025`), autoplac as a query param (`?yearFrom=2025`); both support
+`search[filter_enum_gearbox]=manual` / `transmissionTypes=MANUAL` and
+similar facet filters — copy them straight from the site's own search UI.
 
 ## 🖥️ Dashboards
 
 Two ways to view the data, both driven from the same JSON:
 
 - **Static HTML** — `car-scraper report` writes a self-contained, interactive
-  `plots/index.html` (Plotly, no server). The pipeline regenerates and commits
-  it daily, so it works on GitHub Pages / your phone.
+  `plots/index.html` (Plotly, no server). The daily pipeline regenerates it
+  and deploys it straight to GitHub Pages (no server, works on your phone).
 - **Local interactive (Docker)** — `docker compose up` → http://localhost:8501
   for a Streamlit app with model/year filters, price-over-time charts and a
   sortable, linked table.
 
-PNG charts per model are still generated under `plots/{model}/`.
+PNG charts per model are also generated under `plots/{model}/`, published to
+the same Pages site. `plots/` is entirely generated (gitignored) — it's never
+committed, so it doesn't grow the repo; see [`targets.json`](targets.json)
+for what actually gets tracked in git (`data/`, the price-history database).
 
 ## 🔔 Alerts
 
-The daily pipeline opens (or comments on) a GitHub issue titled **"🚗 Car
-alerts"** whenever a new listing appears or a tracked price drops. No external
-service or secret needed — it uses the built-in `GITHUB_TOKEN`.
+Every run that finds a new listing or a price drop fires two channels:
+
+- **GitHub issue** — opens (or comments on) an issue titled **"🚗 Car
+  alerts"** with the full markdown detail. No secret needed — uses the
+  built-in `GITHUB_TOKEN`.
+- **Pushover push notification** — a compact summary (title + up to 5 items
+  per section) sent to your phone/desktop via [Pushover](https://pushover.net),
+  linking to the dashboard. Opt-in: set the `PUSHOVER_TOKEN` (application)
+  and `PUSHOVER_USER` (user/group key) repo secrets under *Settings → Secrets
+  and variables → Actions*; without them this step silently no-ops. Locally,
+  export the same two env vars before running `scrape-all` to get pushed
+  alerts from your own machine too.
 
 ## ✨ Features
 
@@ -58,14 +94,15 @@ service or secret needed — it uses the built-in `GITHUB_TOKEN`.
 
 ## 📊 Live dashboard
 
-🔥 **[Open the live dashboard →](https://simonloach.github.io/car-scraper/)** — interactive Plotly (deal-finder, market trend, depreciation, price tracking), rebuilt and published daily by the pipeline.
+🔥 **[Open the live dashboard →](https://ironwood-qt.github.io/car-scraper/)** — interactive Plotly (deal-finder, market trend, depreciation, price tracking), rebuilt and published daily by the pipeline.
 
-Per-model PNG snapshots are also generated under `plots/{model}/`:
+Per-model PNG snapshots are also published there (not in the git tree — see
+above):
 
 | Graph | Description | Latest |
 |-------|-------------|--------|
-| 💰 **Price vs Mileage** | Value correlation and depreciation patterns | ![](plots/lexus-lc/price_vs_mileage.png) |
-| 📅 **Year Analysis** | Market composition by manufacturing year | ![](plots/lexus-lc/year_analysis.png) |
+| 💰 **Price vs Mileage** | Value correlation and depreciation patterns | ![](https://ironwood-qt.github.io/car-scraper/lexus-lc/price_vs_mileage.png) |
+| 📅 **Year Analysis** | Market composition by manufacturing year | ![](https://ironwood-qt.github.io/car-scraper/lexus-lc/year_analysis.png) |
 
 ## 🚀 Installation
 
@@ -206,7 +243,8 @@ car-scraper/
 │   ├── {model}/               # Per-model directories
 │   │   └── {model}.json       # Unified data file with listings and price history
 │   └── ...                    # Additional models
-├── plots/                     # Model-specific visualizations
+├── plots/                     # Generated dashboard (gitignored, not committed)
+│   ├── index.html             # Interactive Plotly dashboard, deployed to Pages
 │   ├── {model}/               # Per-model plot directories
 │   │   ├── year_analysis.png  # Year-based analysis
 │   │   ├── price_vs_mileage.png # Value correlation
@@ -232,8 +270,9 @@ This project includes a powerful GitHub Action that automatically scrapes car li
 
 ### Supported Models
 
-The action includes pre-configured URLs for popular models:
-- `lexus-lc` - Lexus LC (primary tracked model)
+Tracked models come from [`targets.json`](targets.json) — see
+[🎯 Tracked targets](#-tracked-targets) above for the current list and how to
+add one.
 
 ### Manual Execution
 
