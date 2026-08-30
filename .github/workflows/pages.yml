@@ -1,15 +1,12 @@
-name: 🌐 Deploy dashboard to Pages
+name: 🌐 Redeploy dashboard to Pages
 
-# Publishes the self-contained plots/ folder (index.html + PNGs) to GitHub
-# Pages. Runs after the daily scrape commits new data, and on manual dispatch.
-# One-time setup: repo Settings → Pages → Source: "GitHub Actions".
+# Manual fallback: rebuilds plots/ from the data/ already committed on main
+# and redeploys it to Pages. The daily-scrape workflow does this same
+# build-and-deploy automatically after every scrape, so this is only needed
+# to force a redeploy without waiting for (or triggering) a new scrape - e.g.
+# after changing report_template.html or the Pages site settings.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'plots/**'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -17,20 +14,43 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment; don't cancel an in-progress run.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
   deploy:
+    runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+
     steps:
-      - name: 🔄 Checkout
+      - name: 🔄 Checkout repository
         uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: false
+
+      - name: 🔄 Install dependencies
+        run: poetry install --no-interaction --no-ansi
+
+      - name: 📊 Generate PNG plots + static dashboard
+        run: |
+          for key in $(python -c "import json;print(' '.join(t['key'] for t in json.load(open('targets.json'))['targets']))"); do
+            echo "Plotting $key"
+            poetry run python main.py plot --model "$key" --plot-type all || true
+          done
+          poetry run python main.py report
 
       - name: ⚙️ Configure Pages
         uses: actions/configure-pages@v5

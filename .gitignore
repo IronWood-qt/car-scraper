@@ -187,3 +187,9 @@ scripts/logs/
 # Alert payload (transient, consumed by the workflow) and cleanup backups
 data/alerts.md
 *.pre-clean
+
+# Generated dashboard (PNG plots + index.html) - rebuilt by `car-scraper plot`
+# / `report` and deployed straight to GitHub Pages by CI. Never committed:
+# full-render PNGs committed daily were the reason .git ballooned to ~390MB
+# over 15 months (see the "chore: squash history to shrink repo" commit).
+/plots/

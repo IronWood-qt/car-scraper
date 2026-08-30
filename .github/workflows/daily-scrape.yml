@@ -11,9 +11,15 @@ jobs:
   scrape-and-analyze:
     runs-on: ubuntu-latest
 
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     permissions:
-      contents: write  # push data/plots back to repo
+      contents: write  # push data/ back to repo
       issues: write    # open/append car-alert issues
+      pages: write     # deploy the dashboard
+      id-token: write  # required by actions/deploy-pages
 
     steps:
     - name: 🔄 Checkout repository
@@ -34,6 +40,10 @@ jobs:
       run: poetry install --no-interaction --no-ansi
 
     - name: 🔍 Scrape all targets
+      env:
+        PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
+        PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
+        DASHBOARD_URL: https://ironwood-qt.github.io/car-scraper/
       run: poetry run python main.py scrape-all --max-pages 5
 
     - name: 📊 Generate PNG plots + static dashboard
@@ -43,6 +53,21 @@ jobs:
           poetry run python main.py plot --model "$key" --plot-type all || true
         done
         poetry run python main.py report
+
+    # plots/ is gitignored (see .gitignore) - deploy it straight to Pages
+    # instead of committing it, so daily runs don't keep bloating .git with
+    # full PNG re-renders.
+    - name: ⚙️ Configure Pages
+      uses: actions/configure-pages@v5
+
+    - name: 📤 Upload plots/ as Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: plots
+
+    - name: 🚀 Deploy dashboard to Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
 
     - name: 🔔 Alert on new cars / price drops
       if: ${{ hashFiles('data/alerts.md') != '' }}
@@ -67,7 +92,8 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add data/ plots/
+        # plots/ is gitignored and deployed to Pages above, not committed.
+        git add data/
 
         if ! git diff --staged --quiet; then
           git commit -m "chore: 🚗 Daily scrape: $(date '+%Y-%m-%d %H:%M:%S UTC')"
