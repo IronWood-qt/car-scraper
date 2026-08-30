@@ -255,19 +255,24 @@ def _toyota_gr86(text: str, _listing: dict) -> dict:
 
 _XC90_TRIM = [
     ("Ultimate", _kw("ultimate")),
+    ("Ultra", _kw("ultra")),
     ("Plus", _kw("plus")),
     ("Core", _kw("core")),
-    ("Inscription", _kw("inscription")),
-    ("R-Design", _kw("r-design", "r design")),
-    ("Momentum", _kw("momentum")),
+    ("Inscription", _kw("inscription")),  # pre-facelift (2015-2024) naming
+    ("R-Design", _kw("r-design", "r design")),  # pre-facelift naming
+    ("Momentum", _kw("momentum")),  # pre-facelift naming
+]
+
+_XC90_VARIANT = [
+    ("T8", _kw("t8", "recharge")),  # plug-in hybrid
+    ("B6", _kw("b6")),  # mild-hybrid petrol, higher output
+    ("B5", _kw("b5")),  # mild-hybrid petrol
 ]
 
 
 def _volvo_xc90(text: str, _listing: dict) -> dict:
-    """XC90 B5 (mild-hybrid petrol) vs T8 (plug-in hybrid, marketed as 'Recharge')."""
-    is_phev = bool(re.search(r"\bt8\b|recharge|plug-?in", text, re.I))
-    variant = "T8" if is_phev else "B5"
-    return {"variant": variant, "trim": _first(text, _XC90_TRIM)}
+    """XC90 powertrain (B5/B6 mild-hybrid petrol, T8 plug-in 'Recharge') + trim."""
+    return {"variant": _first(text, _XC90_VARIANT), "trim": _first(text, _XC90_TRIM)}
 
 
 # model key -> classifier. Models not listed get only the shared origin facet.
@@ -375,10 +380,14 @@ def _selfcheck() -> None:
     )
     assert u == {"country": "Niemcy", "flag": "🇩🇪"}, u
 
-    # XC90 T8 (Recharge PHEV) vs B5 (mild-hybrid petrol), trim from text.
-    t8 = classify("volvo-xc90", {"title": "Volvo XC90 T8 Recharge Ultimate Bright"})
-    b5 = classify("volvo-xc90", {"title": "Volvo XC90 B5 AWD Plus Dark"})
-    assert t8["variant"] == "T8" and t8["trim"] == "Ultimate", t8
+    # XC90 powertrain + trim, matching real otomoto listing titles.
+    t8 = classify(
+        "volvo-xc90", {"title": "Volvo XC 90 T8 AWD Plug-In Hybrid Ultra Dark 7os"}
+    )
+    b6 = classify("volvo-xc90", {"title": "Volvo XC 90 B6 B AWD Ultimate Bright 7os"})
+    b5 = classify("volvo-xc90", {"title": "Volvo XC 90 B5 B AWD Plus Bright"})
+    assert t8["variant"] == "T8" and t8["trim"] == "Ultra", t8
+    assert b6["variant"] == "B6" and b6["trim"] == "Ultimate", b6
     assert b5["variant"] == "B5" and b5["trim"] == "Plus", b5
 
     print("facets self-check OK")

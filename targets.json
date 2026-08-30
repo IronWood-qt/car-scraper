@@ -40,10 +40,10 @@
       "key": "volvo-xc90",
       "label": "Volvo XC90 (2025+)",
       "sources": [
-        {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/volvo/xc90/od-2025"},
+        {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/volvo/xc-90/od-2025"},
         {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/volvo/xc90?yearFrom=2025"}
       ],
-      "note": "Current-generation XC90, model year 2025+ (B5 mild-hybrid petrol / T8 plug-in hybrid)"
+      "note": "Current-generation XC90, model year 2025+ (B5/B6 mild-hybrid petrol / T8 plug-in hybrid); otomoto's model slug is 'xc-90' (hyphenated), not 'xc90'"
     }
   ]
 }
