@@ -45,6 +45,10 @@ jobs:
     # targets.json is gitignored (which cars you track is private, not
     # project config - see .gitignore / README) so checkout never has it.
     # Materialize it here from a repo secret instead.
+    # This fresh runner has no targets.db either - write targets.json from
+    # the secret, then scrape-all's first open_default_store() call
+    # auto-imports it into targets.db (see src/target_store.py). The plot
+    # loop below also reads targets.json directly, for the model-key list.
     - name: 🔐 Write targets.json from secret
       env:
         TARGETS_JSON: ${{ secrets.TARGETS_JSON }}

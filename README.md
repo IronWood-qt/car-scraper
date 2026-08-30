@@ -10,26 +10,38 @@ analysis, and visualization. Listing data is read straight from otomoto's
 embedded structured data (clean price / year / mileage / engine power / gearbox
 / fuel type), so no fragile per-advert HTML scraping.
 
-**Self-hosted by design**: both what you're searching for (`targets.json`)
-and what it finds (`data/`) are gitignored and never committed, in this repo
-or a fork, locally or in CI — this repo is code only. Run it wherever you
-control the storage (a home server, a NAS, `docker compose up`); see
-[🖥️ Dashboards](#️-dashboards) below.
+**Self-hosted by design**: both what you're searching for (`targets.db`) and
+what it finds (`data/`) are gitignored and never committed, in this repo or a
+fork, locally or in CI — this repo is code only. Run it wherever you control
+the storage (a home server, a NAS, `docker compose up`); see [🖥️
+Dashboards](#️-dashboards) below.
 
 ## 🎯 Tracked targets
 
-**Which cars you track is private, not project config: `targets.json` is
-gitignored and never committed** (see [`.gitignore`](.gitignore)) — it never
-touches git history, on any branch, in this repo or a fork. The listings it
-finds (`data/`) are gitignored too, for the same reason — see [🖥️
-Dashboards](#️-dashboards). Set yours up once:
+**Which cars you track is private, not project config: `targets.db` (SQLite)
+is gitignored and never committed** (see [`.gitignore`](.gitignore)) — it
+never touches git history, on any branch, in this repo or a fork. The
+listings it finds (`data/`) are gitignored too, for the same reason — see
+[🖥️ Dashboards](#️-dashboards).
+
+Edit it from the dashboard's **🎯 Manage Targets** page (add/edit/delete,
+form-based - see the screenshot in 🖥️ Dashboards) or from the CLI:
 
 ```bash
-cp targets.example.json targets.json
-# then edit targets.json - it's yours, git will never see it
+poetry run python main.py targets list                       # what's tracked
+poetry run python main.py targets import targets.example.json # seed from a file
+poetry run python main.py targets remove some-key
 ```
 
-Each target in `targets.json`:
+`targets.db` is created automatically the first time anything touches it
+(dashboard, CLI, or `scrape-all`). If you have an old `targets.json` lying
+around from before targets.db existed, that first run auto-imports it once
+- nothing to do by hand. Otherwise, [`targets.example.json`](targets.example.json)
+is a real, working file you can import as a starting point (see the CLI
+snippet above, or the "Import from a JSON file" section on the Manage
+Targets page) and then edit from there.
+
+Each target has:
 
 ```json
 {
@@ -52,6 +64,9 @@ Each target in `targets.json`:
   }
 }
 ```
+(that's the JSON *import* shape / what the Manage Targets form edits as text
+for `sources`/`facets` - it's stored relationally in `targets.db`, key is the
+primary key, see [`src/target_store.py`](src/target_store.py).)
 
 `sources` may be a single entry or several — listings from every source are
 merged into one data file per `key`, deduplicated by listing id. `site` is
@@ -74,44 +89,56 @@ dimension (`variant` / `trim` / `body`, all optional) is an ordered list of
 appear (whole-word, case-insensitive) in the listing's title/description
 wins, so put more specific labels first. `targets.example.json` has a real,
 working second example (Lexus LC's actual V8/hybrid + trim split, purely as
-config) you can scrape as-is. A handful of the originally-tracked models
+config) you can import as-is. A handful of the originally-tracked models
 (Lexus LC, Mazda MX-5, Toyota Supra/GR86) also have their facet logic
 hardcoded in [`facets.py`](src/car_scraper/facets.py) from before this config
-existed — new targets don't need that, `facets` in `targets.json` covers it;
-if a target's own JSON has a `facets` block it always wins over any hardcoded
-classifier for that key.
+existed — new targets don't need that, a `facets` block covers it; when a
+target has one, it always wins over any hardcoded classifier for that key.
 
 ### Optional: the `TARGETS_JSON` CI secret
 
 The included GitHub Actions workflow ([`daily-scrape.yml`](.github/workflows/daily-scrape.yml))
 is disabled by default (manual trigger only) — the recommended path is
 running this yourself, self-hosted (see [🖥️ Dashboards](#️-dashboards)),
-since GitHub Actions has nowhere private to persist `data/` between runs (see
-that workflow's file header for why). If you ever do want to manually
-trigger it, it checks out the repo fresh and so never has your local
-`targets.json`; give it one via a repo secret instead: *Settings → Secrets
+since GitHub Actions has nowhere private to persist `data/` (or `targets.db`)
+between runs (see that workflow's file header for why). If you ever do want
+to manually trigger it, it checks out the repo fresh and so has neither;
+give it a copy of your targets via a repo secret instead: *Settings → Secrets
 and variables → Actions → New repository secret* → name `TARGETS_JSON`,
-value = the full contents of your local `targets.json`. The workflow writes
-it to `targets.json` at the start of the run and fails fast (with a clear
-error) if the secret is unset or the JSON is invalid - it's never logged
-(secrets are masked) or written anywhere but the ephemeral runner's disk.
+value = `targets.example.json`-shaped JSON (export yours with `poetry run
+python -c "from src.target_store import TargetStore; TargetStore().export_json('out.json')"`).
+The workflow writes it to `targets.json`, which the first `scrape-all` call
+auto-imports into a fresh `targets.db` right there in the runner - fails
+fast (with a clear error) if the secret is unset or the JSON is invalid, and
+it's never logged (secrets are masked) or written anywhere but the ephemeral
+runner's disk.
 
 ## 🖥️ Dashboards
 
-**Self-hosted (recommended)** — `docker compose up` → http://localhost:8501,
-a Streamlit app with model/year filters, price-over-time charts and a
-sortable, linked table, reading `data/` straight off disk. Point it at a
-volume on a home server / NAS and it's a permanent, private web dashboard on
-your own network — nothing about what you track or find ever leaves that
-box. Pair it with a scheduler (cron, systemd timer, etc.) running
-`car-scraper scrape-all` periodically to keep `data/` fresh.
+**Self-hosted (recommended)**:
+
+```bash
+touch targets.db   # first time only - see the docker-compose.yml comment for why
+docker compose up  # -> http://localhost:8501
+```
+
+A Streamlit app with two pages (sidebar nav): the main dashboard (model/year
+filters, price-over-time charts, a sortable linked table, reading `data/`
+straight off disk) and **🎯 Manage Targets** (add/edit/delete tracked cars -
+see [🎯 Tracked targets](#-tracked-targets) above), backed by `targets.db`.
+Point it at volumes on a home server / NAS and it's a permanent, private web
+dashboard on your own network — nothing about what you track or find ever
+leaves that box. Pair it with a scheduler (cron, systemd timer, etc.) running
+`car-scraper scrape-all` periodically to keep `data/` fresh (scraping itself
+isn't containerized - see [🤖 Scheduling](#-scheduling) below).
 
 There's also `car-scraper report`, which writes a self-contained, interactive
 `plots/index.html` (Plotly, no server) plus per-model PNGs under
 `plots/{model}/` — handy for a quick static snapshot, or to publish somewhere
-yourself if you ever do want a public view. Both `data/` and `plots/` are
-gitignored (see [🎯 Tracked targets](#-tracked-targets) above) - generated
-locally, never committed, so none of it grows the repo either.
+yourself if you ever do want a public view. `data/`, `plots/` and `targets.db`
+are all gitignored (see [🎯 Tracked targets](#-tracked-targets) above) -
+generated/edited locally, never committed, so none of it grows the repo
+either.
 
 ## 🔔 Alerts
 
@@ -191,7 +218,7 @@ docker run -v $(pwd)/data:/app/data car-scraper --help
 ### Quick Start
 
 ```bash
-# Scrape every target in targets.json - run this on your own schedule
+# Scrape every target in targets.db - run this on your own schedule
 car-scraper scrape-all --max-pages 5
 
 # Build the interactive static dashboard (plots/index.html)
@@ -272,16 +299,23 @@ car-scraper status
 
 ```
 car-scraper/
-├── src/car_scraper/           # Main package
-│   ├── models/                # Pydantic data models
-│   ├── scrapers/              # Web scraping modules
-│   ├── storage/               # Data persistence
-│   ├── plotters/              # Visualization modules
-│   └── utils/                 # Utilities and helpers
+├── src/
+│   ├── target_store.py        # SQLite CRUD for targets.db (stdlib-only, shared by CLI + dashboard)
+│   └── car_scraper/            # Main package
+│       ├── models/                # Pydantic data models
+│       ├── scrapers/              # Web scraping modules
+│       ├── storage/               # Data persistence
+│       ├── plotters/              # Visualization modules
+│       └── utils/                 # Utilities and helpers
+├── dashboard/                  # Streamlit web UI (standalone container - see dashboard/Dockerfile)
+│   ├── app.py                     # Main page: browse listings/charts
+│   └── pages/
+│       └── 1_🎯_Manage_Targets.py    # Add/edit/delete targets
 ├── data/                      # Model-specific data storage (gitignored, not committed)
 │   ├── {model}/               # Per-model directories
 │   │   └── {model}.json       # Unified data file with listings and price history
 │   └── ...                    # Additional models
+├── targets.db                 # SQLite: tracked targets (gitignored, not committed)
 ├── plots/                     # Generated dashboard (gitignored, not committed)
 │   ├── index.html             # Interactive Plotly dashboard (static, optional)
 │   ├── {model}/               # Per-model plot directories
@@ -405,6 +439,50 @@ car-scraper status [OPTIONS]
 - Models found and record counts
 - File sizes and last update times
 - Data directory structure overview
+
+### 🚙 `scrape-all` - Scrape Every Tracked Target
+
+```bash
+car-scraper scrape-all [OPTIONS]
+```
+
+This is what you'd put on a schedule (see [🤖 Scheduling](#-scheduling)).
+Reads every target from `targets.db`, merges each target's sources into one
+data file, and writes an alert body (Pushover + `data/alerts.md` for the
+GitHub-issue step) if anything is new or dropped in price.
+
+**Options:**
+- `--db TEXT` - targets.db path (default: `$TARGETS_DB` or `./targets.db`)
+- `--data-dir TEXT` - Directory to save data (default: `./data`)
+- `--max-pages INTEGER` - Maximum pages per target (default: 10)
+- `--alerts-file TEXT` - Where to write the alert body (default: `data/alerts.md`)
+
+### 🖥️ `report` - Build the Static HTML Dashboard
+
+```bash
+car-scraper report [OPTIONS]
+```
+
+Writes the self-contained `plots/index.html` (see [🖥️ Dashboards](#️-dashboards)).
+
+**Options:**
+- `--data-dir TEXT` - Directory containing data (default: `./data`)
+- `--output TEXT` - Output HTML file (default: `plots/index.html`)
+- `--db TEXT` - targets.db path (default: `$TARGETS_DB` or `./targets.db`)
+
+### 🎯 `targets` - Manage Tracked Targets
+
+```bash
+car-scraper targets list [--db PATH]
+car-scraper targets import JSON_FILE [--db PATH] [--overwrite]
+car-scraper targets remove KEY [--db PATH]
+```
+
+CLI counterpart to the dashboard's Manage Targets page - see [🎯 Tracked
+targets](#-tracked-targets) above for the full picture (schema, auto-import
+from a legacy `targets.json`, the `facets` config). Adding/editing a target
+with full control (`sources`/`facets`) is form-based on the dashboard; the
+CLI covers listing, bulk import, and removal.
 
 ## 📁 Data Structure
 
