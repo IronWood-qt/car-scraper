@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from src.car_scraper.facets import classify
+from src.target_store import open_default_store
 
 
 def _md_escape(s: str) -> str:
@@ -32,52 +33,50 @@ def _money(n) -> str:
         return "—"
 
 
-def _load_targets_list(targets_file: str) -> list[dict]:
-    """Raw ``targets`` array from targets.json (empty if missing/invalid).
+def _load_targets_list(db_path: str | None = None) -> list[dict]:
+    """Raw target dicts from targets.db (empty if the store can't be opened).
 
-    targets.json is gitignored (never committed - see README) so it may
-    simply not exist, e.g. in a fresh checkout without the secret/local file
-    set up yet; that's not an error, just an empty target list.
+    targets.db is gitignored (never committed - see README) so it may simply
+    not exist yet, e.g. in a fresh checkout with nothing set up; that's not
+    an error, just an empty target list. ``open_default_store`` auto-imports
+    from a legacy targets.json the first time it's called, if one is present.
     """
-    path = Path(targets_file)
-    if not path.exists():
-        return []
     try:
-        return json.loads(path.read_text(encoding="utf-8")).get("targets", [])
-    except json.JSONDecodeError:
+        return open_default_store(db_path).list_targets()
+    except OSError:
         return []
 
 
-def load_targets(targets_file: str = "targets.json") -> dict[str, str]:
-    """Return ``{key: label}`` from targets.json (empty if missing)."""
+def load_targets(db_path: str | None = None) -> dict[str, str]:
+    """Return ``{key: label}`` from targets.db (empty if missing)."""
     return {
         t["key"]: t.get("label", t["key"])
-        for t in _load_targets_list(targets_file)
+        for t in _load_targets_list(db_path)
         if t.get("key")
     }
 
 
-def load_target_facets(targets_file: str = "targets.json") -> dict[str, dict]:
+def load_target_facets(db_path: str | None = None) -> dict[str, dict]:
     """Return ``{key: facets_config}`` for targets that define a "facets" block.
 
     This is what lets a target's variant/trim/body classification be
-    configured entirely in targets.json - see :func:`car_scraper.facets.classify`
-    and ``targets.example.json``.
+    configured entirely in targets.db - see :func:`car_scraper.facets.classify`
+    and the dashboard's "Manage Targets" page.
     """
     return {
         t["key"]: t["facets"]
-        for t in _load_targets_list(targets_file)
+        for t in _load_targets_list(db_path)
         if t.get("key") and t.get("facets")
     }
 
 
-def load_models(data_dir: str, targets_file: str = "targets.json") -> list[dict]:
+def load_models(data_dir: str, db_path: str | None = None) -> list[dict]:
     """Load every model's listings from ``data_dir``.
 
     Each item: ``{"key", "label", "listings": [listing, ...], "facets_config"}``.
     """
-    labels = load_targets(targets_file)
-    facets_configs = load_target_facets(targets_file)
+    labels = load_targets(db_path)
+    facets_configs = load_target_facets(db_path)
     base = Path(data_dir)
     models: list[dict] = []
     if not base.exists():
@@ -407,11 +406,11 @@ _TEMPLATE_PATH = Path(__file__).with_name("report_template.html")
 def build_static_report(
     data_dir: str = "data",
     out_path: str = "plots/index.html",
-    targets_file: str = "targets.json",
+    db_path: str | None = None,
     generated: str = "",
 ) -> str:
     """Write a self-contained HTML dashboard. Returns the output path."""
-    models = [_prep_model(m) for m in load_models(data_dir, targets_file)]
+    models = [_prep_model(m) for m in load_models(data_dir, db_path)]
     all_listings = [car for m in models for car in m["listings"]]
     active = [car for car in all_listings if car.get("active")]
     global_data = {

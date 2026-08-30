@@ -269,7 +269,10 @@ def status(data_dir: str):
 
 @cli.command(name="scrape-all")
 @click.option(
-    "--targets", "targets_file", default="targets.json", help="Targets config file"
+    "--db",
+    "db_path",
+    default=None,
+    help="targets.db path (default: $TARGETS_DB or ./targets.db)",
 )
 @click.option("--data-dir", default="./data", help="Directory to save data")
 @click.option("--max-pages", default=10, help="Maximum pages per target")
@@ -278,19 +281,18 @@ def status(data_dir: str):
     default="data/alerts.md",
     help="Where to write the alert body (only if there is something to report)",
 )
-def scrape_all(targets_file: str, data_dir: str, max_pages: int, alerts_file: str):
-    """🚙 Scrape every target in targets.json and write an alert summary.
+def scrape_all(db_path: str | None, data_dir: str, max_pages: int, alerts_file: str):
+    """🚙 Scrape every target in targets.db and write an alert summary.
 
     This is what the daily pipeline runs. Each target has its own filtered
     otomoto URL so we only track the exact variants we care about.
     """
-    import json
-
     from src.car_scraper.notifiers.pushover import send_pushover
     from src.car_scraper.reporting import format_alert_markdown, format_alert_pushover
     from src.car_scraper.storage.simplified_listings import SimplifiedListingsStorage
+    from src.target_store import open_default_store
 
-    targets = json.loads(Path(targets_file).read_text(encoding="utf-8"))["targets"]
+    targets = open_default_store(db_path).list_targets()
     storage = SimplifiedListingsStorage(data_dir)
     current_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -353,16 +355,69 @@ def scrape_all(targets_file: str, data_dir: str, max_pages: int, alerts_file: st
 @click.option("--data-dir", default="./data", help="Directory containing data")
 @click.option("--output", default="plots/index.html", help="Output HTML file")
 @click.option(
-    "--targets", "targets_file", default="targets.json", help="Targets config file"
+    "--db",
+    "db_path",
+    default=None,
+    help="targets.db path (default: $TARGETS_DB or ./targets.db)",
 )
-def report(data_dir: str, output: str, targets_file: str):
+def report(data_dir: str, output: str, db_path: str | None):
     """🖥️  Build the static HTML dashboard (interactive, no server needed)."""
     from src.car_scraper.reporting import build_static_report
 
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    path = build_static_report(data_dir, output, targets_file, generated)
+    path = build_static_report(data_dir, output, db_path, generated)
     logger.success(f"Static report written to {path}")
     click.echo(f"🖥️  Dashboard: {path}")
+
+
+@cli.group()
+def targets():
+    """Manage tracked targets (stored in targets.db - see the dashboard's
+    "Manage Targets" page for a form-based editor)."""
+
+
+@targets.command("list")
+@click.option("--db", "db_path", default=None, help="targets.db path")
+def targets_list(db_path: str | None):
+    """List configured targets."""
+    from src.target_store import open_default_store
+
+    rows = open_default_store(db_path).list_targets()
+    if not rows:
+        click.echo(
+            "No targets configured yet - see the dashboard's Manage Targets page."
+        )
+        return
+    for t in rows:
+        tag = " [facets]" if t.get("facets") else ""
+        click.echo(f"{t['key']:<20} {t['label']}{tag}")
+
+
+@targets.command("import")
+@click.argument("json_file", type=click.Path(exists=True))
+@click.option("--db", "db_path", default=None, help="targets.db path")
+@click.option(
+    "--overwrite", is_flag=True, help="Replace existing targets that share a key"
+)
+def targets_import(json_file: str, db_path: str | None, overwrite: bool):
+    """Import targets from a targets.json-shaped file (e.g. targets.example.json)."""
+    from src.target_store import TargetStore
+
+    n = TargetStore(db_path).import_json(json_file, overwrite=overwrite)
+    click.echo(f"✅ Imported {n} target(s) from {json_file}")
+
+
+@targets.command("remove")
+@click.argument("key")
+@click.option("--db", "db_path", default=None, help="targets.db path")
+def targets_remove(key: str, db_path: str | None):
+    """Remove one target by key."""
+    from src.target_store import TargetStore
+
+    if TargetStore(db_path).delete(key):
+        click.echo(f"✅ Removed {key}")
+    else:
+        raise click.ClickException(f"No target with key {key!r}")
 
 
 if __name__ == "__main__":
