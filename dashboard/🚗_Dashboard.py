@@ -1,7 +1,8 @@
 """Interactive car-tracker dashboard (Streamlit).
 
 Standalone on purpose: reads data/<model>/<model>.json directly and only
-imports src/target_store.py (stdlib-only) for the target list/labels, so the
+imports src/target_store.py + src/facets.py (both stdlib-only) for the
+target list/labels and the country/accident/damage classification, so the
 container needs streamlit + plotly + pandas and nothing from the scraper
 package's own (much heavier) dependencies. Run locally with `docker compose
 up` (see docker-compose.yml) or `streamlit run dashboard/🚗_Dashboard.py`. See
@@ -24,6 +25,7 @@ import streamlit as st
 # image too (see dashboard/Dockerfile) so this is identical in both places.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.facets import classify  # noqa: E402
 from src.target_store import open_default_store  # noqa: E402
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
@@ -36,9 +38,25 @@ def load_labels() -> dict:
     return {t["key"]: t["label"] for t in open_default_store(DB_PATH).list_targets()}
 
 
+def _condition_label(accident_free, damaged) -> str:
+    """One readable label from the (accident_free, damaged) pair."""
+    if accident_free is True:
+        return "✅ Bezwypadkowy"
+    if accident_free is False:
+        return "💥 Powypadkowy"
+    if damaged is True:
+        return "🔧 Uszkodzony"
+    return "—"
+
+
 @st.cache_data(ttl=300)
 def load_model(key: str) -> pd.DataFrame:
-    """Load one model's listings into a DataFrame (empty on read error)."""
+    """Load one model's listings into a DataFrame, tagged with facets.
+
+    Adds ``origin`` (flag + country) and ``condition`` (accident/damage,
+    text-derived - see src/facets.py for why this can't be exact) to every
+    row, same classification the static HTML report uses.
+    """
     f = DATA_DIR / key / f"{key}.json"
     try:
         data = json.loads(f.read_text(encoding="utf-8"))
@@ -51,6 +69,15 @@ def load_model(key: str) -> pd.DataFrame:
         listings = data
     else:
         listings = []
+    for listing in listings:
+        facets = classify(key, listing)
+        listing["country"] = facets["country"]
+        listing["origin"] = f"{facets['flag']} {facets['country']}".strip()
+        listing["accident_free"] = facets["accident_free"]
+        listing["damaged"] = facets["damaged"]
+        listing["condition"] = _condition_label(
+            facets["accident_free"], facets["damaged"]
+        )
     return pd.DataFrame(listings)
 
 
@@ -109,6 +136,30 @@ if "year" in df.columns and df["year"].notna().any():
     if yhi > ylo:
         lo, hi = st.sidebar.slider("Year", ylo, yhi, (ylo, yhi))
         df = df[df["year"].between(lo, hi)]
+
+# Origin + accident/damage filters - text-derived (see src/facets.py), so a
+# miss means "not mentioned" rather than "confirmed negative"; the checkboxes
+# below only ever *hide* a positive match, never assume absence either way.
+if "country" in df.columns and df["country"].notna().any():
+    countries = sorted(df["country"].dropna().unique())
+    picked = st.sidebar.multiselect("Origin", countries, default=countries)
+    df = df[df["country"].isin(picked)]
+if (
+    "accident_free" in df.columns
+    and (df["accident_free"] == True).any()  # noqa: E712
+    and st.sidebar.checkbox("Bezwypadkowy only")
+):
+    df = df[df["accident_free"] == True]  # noqa: E712
+if (
+    "damaged" in df.columns
+    and (df["damaged"] == True).any()  # noqa: E712
+    and st.sidebar.checkbox("Hide uszkodzony")
+):
+    df = df[df["damaged"] != True]  # noqa: E712
+
+if df.empty:
+    st.info("No listings match the current filters.")
+    st.stop()
 
 st.caption(labels.get(key, key))
 c1, c2, c3, c4 = st.columns(4)
@@ -170,6 +221,8 @@ cols = [
         "engine_power",
         "gearbox",
         "version",
+        "origin",
+        "condition",
         "current_price",
         "url",
     ]

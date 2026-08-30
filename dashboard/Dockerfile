@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r dashboard/requirements.txt
 # fix (repo root = parent of dashboard/) resolves identically here and locally.
 COPY dashboard/ dashboard/
 COPY src/target_store.py src/target_store.py
+COPY src/facets.py src/facets.py
 
 EXPOSE 8501
 HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')" || exit 1

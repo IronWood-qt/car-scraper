@@ -91,7 +91,7 @@ wins, so put more specific labels first. `targets.example.json` has a real,
 working second example (Lexus LC's actual V8/hybrid + trim split, purely as
 config) you can import as-is. A handful of the originally-tracked models
 (Lexus LC, Mazda MX-5, Toyota Supra/GR86) also have their facet logic
-hardcoded in [`facets.py`](src/car_scraper/facets.py) from before this config
+hardcoded in [`facets.py`](src/facets.py) from before this config
 existed — new targets don't need that, a `facets` block covers it; when a
 target has one, it always wins over any hardcoded classifier for that key.
 
@@ -123,7 +123,8 @@ docker compose up  # -> http://localhost:8501
 ```
 
 A Streamlit app with two pages (sidebar nav): the main dashboard (model/year
-filters, price-over-time charts, a sortable linked table, reading `data/`
+filters, an **origin filter** and **bezwypadkowy/uszkodzony** checkboxes -
+see below, price-over-time charts, a sortable linked table, reading `data/`
 straight off disk) and **🎯 Manage Targets** (add/edit/delete tracked cars -
 see [🎯 Tracked targets](#-tracked-targets) above), backed by `targets.db`.
 Point it at volumes on a home server / NAS and it's a permanent, private web
@@ -131,6 +132,15 @@ dashboard on your own network — nothing about what you track or find ever
 leaves that box. Pair it with a scheduler (cron, systemd timer, etc.) running
 `car-scraper scrape-all` periodically to keep `data/` fresh (scraping itself
 isn't containerized - see [🤖 Scheduling](#-scheduling) below).
+
+Every listing also gets **origin** (country, from otomoto's structured field
+or free text) and **condition** (bezwypadkowy/powypadkowy/uszkodzony, text-
+only - see [`src/facets.py`](src/facets.py)) computed automatically, no
+per-target config needed. otomoto's search results carry no structured
+accident/damage field (only the individual advert page does, which this
+project deliberately doesn't scrape), so condition is a text match against
+the title/description and **a miss means "not mentioned," not "confirmed
+undamaged"** - useful as a quick narrow-down, not as a guarantee.
 
 There's also `car-scraper report`, which writes a self-contained, interactive
 `plots/index.html` (Plotly, no server) plus per-model PNGs under
@@ -301,6 +311,7 @@ car-scraper status
 car-scraper/
 ├── src/
 │   ├── target_store.py        # SQLite CRUD for targets.db (stdlib-only, shared by CLI + dashboard)
+│   ├── facets.py               # Origin/condition/variant/trim classification (stdlib-only, shared)
 │   └── car_scraper/            # Main package
 │       ├── models/                # Pydantic data models
 │       ├── scrapers/              # Web scraping modules
