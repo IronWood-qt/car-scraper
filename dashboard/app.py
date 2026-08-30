@@ -1,13 +1,16 @@
 """Interactive car-tracker dashboard (Streamlit).
 
-Standalone on purpose: reads the data/<model>/<model>.json files directly so the
-container only needs streamlit + plotly + pandas, with no dependency on the
-scraper package. Run locally with `docker compose up` (see docker-compose.yml)
-or `streamlit run dashboard/app.py`.
+Standalone on purpose: reads data/<model>/<model>.json directly and only
+imports src/target_store.py (stdlib-only) for the target list/labels, so the
+container needs streamlit + plotly + pandas and nothing from the scraper
+package's own (much heavier) dependencies. Run locally with `docker compose
+up` (see docker-compose.yml) or `streamlit run dashboard/app.py`. See also
+pages/ for the "Manage Targets" editor.
 """
 
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -15,20 +18,22 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+# Repo root (parent of dashboard/) on sys.path so `from src.target_store
+# import ...` resolves regardless of cwd - mirrors main.py's own sys.path
+# setup. Must match dashboard/'s position relative to src/ in the Docker
+# image too (see dashboard/Dockerfile) so this is identical in both places.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.target_store import open_default_store  # noqa: E402
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
-TARGETS = Path(os.environ.get("TARGETS_FILE", "targets.json"))
+DB_PATH = os.environ.get("TARGETS_DB")  # None -> target_store's own default
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=30)
 def load_labels() -> dict:
-    """Return {key: label} from targets.json (empty if missing/invalid)."""
-    if TARGETS.exists():
-        try:
-            t = json.loads(TARGETS.read_text(encoding="utf-8"))
-            return {x["key"]: x.get("label", x["key"]) for x in t.get("targets", [])}
-        except (json.JSONDecodeError, KeyError):
-            pass
-    return {}
+    """Return {key: label} from targets.db (empty if missing/invalid)."""
+    return {t["key"]: t["label"] for t in open_default_store(DB_PATH).list_targets()}
 
 
 @st.cache_data(ttl=300)
@@ -127,7 +132,7 @@ if rows:
         title="Price over time",
     )
     fig.update_layout(yaxis_title="PLN", xaxis_title="")
-    left.plotly_chart(fig, use_container_width=True)
+    left.plotly_chart(fig, width="stretch")
 
 if "mileage" in df.columns and df["mileage"].notna().any():
     fig2 = px.scatter(
@@ -140,7 +145,7 @@ if "mileage" in df.columns and df["mileage"].notna().any():
         color_continuous_scale="Viridis",
     )
     fig2.update_layout(yaxis_title="PLN", xaxis_title="km")
-    right.plotly_chart(fig2, use_container_width=True)
+    right.plotly_chart(fig2, width="stretch")
 
 # Table, cheapest first, with clickable links.
 cols = [
@@ -161,7 +166,7 @@ cols = [
 table = df[cols].sort_values("current_price", na_position="last")
 st.dataframe(
     table,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     column_config={"url": st.column_config.LinkColumn("link", display_text="open")},
 )

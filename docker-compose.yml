@@ -1,4 +1,9 @@
 # Local interactive dashboard:  docker compose up  ->  http://localhost:8501
+#
+# One-time setup: `touch targets.db` before first run - Docker creates a
+# *directory* at the mount path if the host file doesn't exist yet, which
+# breaks the bind mount. (`poetry run python main.py targets list` also
+# creates it, auto-migrating targets.json if you still have one.)
 services:
   dashboard:
     build:
@@ -8,8 +13,8 @@ services:
       - "8501:8501"
     environment:
       DATA_DIR: /data
-      TARGETS_FILE: /app/targets.json
+      TARGETS_DB: /app/targets.db
     volumes:
       - ./data:/data:ro
-      - ./targets.json:/app/targets.json:ro
+      - ./targets.db:/app/targets.db  # read-write: editable from Manage Targets
     restart: unless-stopped
