@@ -12,18 +12,17 @@ embedded structured data (clean price / year / mileage / engine power / gearbox
 
 ## 🎯 Tracked targets
 
-Targets live in [`targets.json`](targets.json) — each is a filtered otomoto
-search URL so only the exact variant is tracked:
+**Which cars you track is private, not project config: `targets.json` is
+gitignored and never committed** (see [`.gitignore`](.gitignore)) — it never
+touches git history, on any branch, in this repo or a fork. Set yours up
+once:
 
-| Key | What | Filter |
-|-----|------|--------|
-| `lexus-lc` | Lexus **LC 500** (V8, NA) | power ≥ 475 KM — excludes the LC 500h V6 hybrid |
-| `mazda-mx-5` | Mazda **MX-5** | manual gearbox, power ≥ 180 KM (2.0 Skyactiv) |
-| `toyota-supra` | Toyota **Supra** (B58) | manual, engine ≥ 2900 cm³, from 2018 |
-| `toyota-gr86` | Toyota **GR86** | manual (2.4 boxer) |
-| `volvo-xc90` | Volvo **XC90** | model year 2025+ (current generation, B5 / T8) |
+```bash
+cp targets.example.json targets.json
+# then edit targets.json - it's yours, git will never see it
+```
 
-Add a target by appending an entry to `targets.json`. Each target is:
+Each target in `targets.json`:
 
 ```json
 {
@@ -33,7 +32,17 @@ Add a target by appending an entry to `targets.json`. Each target is:
     {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/<make>/<model>?<filters>"},
     {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/<make>/<model>?<filters>"}
   ],
-  "note": "optional: what the filters mean"
+  "note": "optional: what the filters mean, for your own future reference",
+  "facets": {
+    "variant": [
+      {"label": "T8", "keywords": ["t8", "recharge"]},
+      {"label": "B5", "keywords": ["b5"]}
+    ],
+    "trim": [
+      {"label": "Ultimate", "keywords": ["ultimate"]},
+      {"label": "Plus", "keywords": ["plus"]}
+    ]
+  }
 }
 ```
 
@@ -46,6 +55,32 @@ patterns: otomoto takes a model-year floor as a path segment
 (`/od-2025`), autoplac as a query param (`?yearFrom=2025`); both support
 `search[filter_enum_gearbox]=manual` / `transmissionTypes=MANUAL` and
 similar facet filters — copy them straight from the site's own search UI.
+otomoto's model URL slug is sometimes hyphenated where the display name
+isn't (e.g. Volvo XC90 → `xc-90`) — an unrecognized slug doesn't error, it
+silently falls back to an unfiltered brand-wide search, so **check the result
+count/listings actually match what you expect** before trusting a new URL.
+
+`facets` (optional) is what turns a variant/trim into filter chips on the
+dashboard, entirely from config — no code needed for a new car. Each
+dimension (`variant` / `trim` / `body`, all optional) is an ordered list of
+`{label, keywords}` rules checked top to bottom; the first whose keywords
+appear (whole-word, case-insensitive) in the listing's title/description
+wins, so put more specific labels first. `targets.example.json` has a second
+worked example. A handful of the originally-tracked models (Lexus LC, Mazda
+MX-5, Toyota Supra/GR86) instead have their facet logic hardcoded in
+[`facets.py`](src/car_scraper/facets.py) from before this config existed —
+new targets don't need that, `facets` in `targets.json` covers it.
+
+### CI: the `TARGETS_JSON` secret
+
+The daily pipeline runs in GitHub Actions, which checks out the repo fresh
+each time — it never has your local `targets.json` either. Give it one via a
+repo secret instead of a file: *Settings → Secrets and variables → Actions →
+New repository secret* → name `TARGETS_JSON`, value = the full contents of
+your local `targets.json`. The workflow writes it to `targets.json` at the
+start of each run and fails fast (with a clear error) if the secret is
+unset or the JSON is invalid - it's never logged (secrets are masked) or
+written anywhere but the ephemeral runner's disk.
 
 ## 🖥️ Dashboards
 
@@ -60,8 +95,9 @@ Two ways to view the data, both driven from the same JSON:
 
 PNG charts per model are also generated under `plots/{model}/`, published to
 the same Pages site. `plots/` is entirely generated (gitignored) — it's never
-committed, so it doesn't grow the repo; see [`targets.json`](targets.json)
-for what actually gets tracked in git (`data/`, the price-history database).
+committed, so it doesn't grow the repo; the only thing that gets tracked in
+git is `data/`, the price-history database (see [🎯 Tracked
+targets](#-tracked-targets) above for why `targets.json` itself isn't).
 
 ## 🔔 Alerts
 
@@ -270,9 +306,9 @@ This project includes a powerful GitHub Action that automatically scrapes car li
 
 ### Supported Models
 
-Tracked models come from [`targets.json`](targets.json) — see
-[🎯 Tracked targets](#-tracked-targets) above for the current list and how to
-add one.
+Tracked models come from your local `targets.json` (see
+[🎯 Tracked targets](#-tracked-targets) above) and, in CI, the `TARGETS_JSON`
+secret.
 
 ### Manual Execution
 
