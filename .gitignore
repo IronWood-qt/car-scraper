@@ -198,3 +198,8 @@ data/alerts.md
 # Copy targets.example.json -> targets.json and edit freely. CI gets its copy
 # from the TARGETS_JSON repo secret instead (see README).
 /targets.json
+
+# Scraped listings/prices are private too - never committed, in CI or
+# locally. This repo ships code only; the actual data lives wherever you run
+# it (self-hosted, e.g. docker-compose at home) and never leaves that box.
+/data/
