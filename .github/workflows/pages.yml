@@ -1,15 +1,13 @@
-name: 🌐 Deploy dashboard to Pages
+name: 🌐 Redeploy dashboard to Pages
 
-# Publishes the self-contained plots/ folder (index.html + PNGs) to GitHub
-# Pages. Runs after the daily scrape commits new data, and on manual dispatch.
-# One-time setup: repo Settings → Pages → Source: "GitHub Actions".
+# Legacy / manual-only: project direction is a self-hosted dashboard
+# (docker-compose, see README/dashboard/), so data/ is gitignored now and a
+# fresh CI checkout has none - this produces an empty dashboard unless
+# daily-scrape.yml's manual run just populated data/ earlier in the same
+# job (it doesn't persist between separate workflow runs either). Kept for
+# reference; the self-hosted app is the real deployment path.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'plots/**'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -17,20 +15,55 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment; don't cancel an in-progress run.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
   deploy:
+    runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+
     steps:
-      - name: 🔄 Checkout
+      - name: 🔄 Checkout repository
         uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: false
+
+      - name: 🔄 Install dependencies
+        run: poetry install --no-interaction --no-ansi
+
+      # targets.json is gitignored (private, not project config) - see README.
+      - name: 🔐 Write targets.json from secret
+        env:
+          TARGETS_JSON: ${{ secrets.TARGETS_JSON }}
+        run: |
+          if [ -z "$TARGETS_JSON" ]; then
+            echo "::error::TARGETS_JSON secret is not set - see README for setup"
+            exit 1
+          fi
+          printf '%s' "$TARGETS_JSON" > targets.json
+          python -c "import json; json.load(open('targets.json'))"
+
+      - name: 📊 Generate PNG plots + static dashboard
+        run: |
+          for key in $(python -c "import json;print(' '.join(t['key'] for t in json.load(open('targets.json'))['targets']))"); do
+            echo "Plotting $key"
+            poetry run python main.py plot --model "$key" --plot-type all || true
+          done
+          poetry run python main.py report
 
       - name: ⚙️ Configure Pages
         uses: actions/configure-pages@v5

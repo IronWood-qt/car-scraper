@@ -1,19 +1,28 @@
 name: 🚗 Daily Car Scraper
 
+# DISABLED by default (no `schedule:` trigger) - project direction is a
+# self-hosted deployment (docker-compose, see README/dashboard/), so scraped
+# data and search criteria stay entirely on your own box and never touch
+# GitHub. Kept here, manual-dispatch-only, for an ad-hoc one-off CI run (e.g.
+# to sanity-check the Pages deploy) if you ever want one - note it starts
+# from zero history every time (data/ isn't persisted in CI), so "new
+# listing" alerts will fire for everything found, every run.
 on:
-  schedule:
-    # Run daily at 6:00 AM UTC
-    - cron: '0 6 * * *'
   workflow_dispatch:
-    # Allow manual trigger
 
 jobs:
   scrape-and-analyze:
     runs-on: ubuntu-latest
 
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     permissions:
-      contents: write  # push data/plots back to repo
+      contents: read
       issues: write    # open/append car-alert issues
+      pages: write     # deploy the dashboard
+      id-token: write  # required by actions/deploy-pages
 
     steps:
     - name: 🔄 Checkout repository
@@ -33,7 +42,27 @@ jobs:
     - name: 🔄 Install dependencies
       run: poetry install --no-interaction --no-ansi
 
+    # targets.json is gitignored (which cars you track is private, not
+    # project config - see .gitignore / README) so checkout never has it.
+    # Materialize it here from a repo secret instead.
+    - name: 🔐 Write targets.json from secret
+      env:
+        TARGETS_JSON: ${{ secrets.TARGETS_JSON }}
+      run: |
+        if [ -z "$TARGETS_JSON" ]; then
+          echo "::error::TARGETS_JSON secret is not set - see README for setup"
+          exit 1
+        fi
+        printf '%s' "$TARGETS_JSON" > targets.json
+        python -c "import json; json.load(open('targets.json'))"  # fail fast on bad JSON
+
     - name: 🔍 Scrape all targets
+      env:
+        PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
+        PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
+        # DASHBOARD_URL: set this repo var/secret if you want the Pushover
+        # push to link somewhere (e.g. your self-hosted dashboard's URL).
+        DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
       run: poetry run python main.py scrape-all --max-pages 5
 
     - name: 📊 Generate PNG plots + static dashboard
@@ -43,6 +72,21 @@ jobs:
           poetry run python main.py plot --model "$key" --plot-type all || true
         done
         poetry run python main.py report
+
+    # plots/ is gitignored (see .gitignore) - deploy it straight to Pages
+    # instead of committing it, so daily runs don't keep bloating .git with
+    # full PNG re-renders.
+    - name: ⚙️ Configure Pages
+      uses: actions/configure-pages@v5
+
+    - name: 📤 Upload plots/ as Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: plots
+
+    - name: 🚀 Deploy dashboard to Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
 
     - name: 🔔 Alert on new cars / price drops
       if: ${{ hashFiles('data/alerts.md') != '' }}
@@ -61,15 +105,4 @@ jobs:
           gh issue comment "$num" --body-file data/alerts.md
         else
           gh issue create --title "$title" --label car-alert --body-file data/alerts.md
-        fi
-
-    - name: 📝 Commit and push results
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add data/ plots/
-
-        if ! git diff --staged --quiet; then
-          git commit -m "chore: 🚗 Daily scrape: $(date '+%Y-%m-%d %H:%M:%S UTC')"
-          git push
         fi

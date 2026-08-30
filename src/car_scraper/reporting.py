@@ -32,24 +32,52 @@ def _money(n) -> str:
         return "—"
 
 
-def load_targets(targets_file: str = "targets.json") -> dict[str, str]:
-    """Return ``{key: label}`` from targets.json (empty if missing)."""
+def _load_targets_list(targets_file: str) -> list[dict]:
+    """Raw ``targets`` array from targets.json (empty if missing/invalid).
+
+    targets.json is gitignored (never committed - see README) so it may
+    simply not exist, e.g. in a fresh checkout without the secret/local file
+    set up yet; that's not an error, just an empty target list.
+    """
     path = Path(targets_file)
     if not path.exists():
-        return {}
+        return []
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return {t["key"]: t.get("label", t["key"]) for t in data.get("targets", [])}
-    except (json.JSONDecodeError, KeyError):
-        return {}
+        return json.loads(path.read_text(encoding="utf-8")).get("targets", [])
+    except json.JSONDecodeError:
+        return []
+
+
+def load_targets(targets_file: str = "targets.json") -> dict[str, str]:
+    """Return ``{key: label}`` from targets.json (empty if missing)."""
+    return {
+        t["key"]: t.get("label", t["key"])
+        for t in _load_targets_list(targets_file)
+        if t.get("key")
+    }
+
+
+def load_target_facets(targets_file: str = "targets.json") -> dict[str, dict]:
+    """Return ``{key: facets_config}`` for targets that define a "facets" block.
+
+    This is what lets a target's variant/trim/body classification be
+    configured entirely in targets.json - see :func:`car_scraper.facets.classify`
+    and ``targets.example.json``.
+    """
+    return {
+        t["key"]: t["facets"]
+        for t in _load_targets_list(targets_file)
+        if t.get("key") and t.get("facets")
+    }
 
 
 def load_models(data_dir: str, targets_file: str = "targets.json") -> list[dict]:
     """Load every model's listings from ``data_dir``.
 
-    Each item: ``{"key", "label", "listings": [listing, ...]}``.
+    Each item: ``{"key", "label", "listings": [listing, ...], "facets_config"}``.
     """
     labels = load_targets(targets_file)
+    facets_configs = load_target_facets(targets_file)
     base = Path(data_dir)
     models: list[dict] = []
     if not base.exists():
@@ -79,6 +107,7 @@ def load_models(data_dir: str, targets_file: str = "targets.json") -> list[dict]
                 "key": model_dir.name,
                 "label": labels.get(model_dir.name, model_dir.name),
                 "listings": listings,
+                "facets_config": facets_configs.get(model_dir.name),
             }
         )
     return models
@@ -270,11 +299,12 @@ def _prep_model(model: dict) -> dict:
     listings = model["listings"]
     _deal_scores(listings)
     key = model["key"]
+    facets_config = model.get("facets_config")
 
     def slim(listing):
         out = {k: listing.get(k) for k in _KEEP}
         out["active"] = _active(listing)
-        out["facets"] = classify(key, listing)
+        out["facets"] = classify(key, listing, config=facets_config)
         return out
 
     slimmed = [slim(car) for car in listings]
@@ -341,6 +371,34 @@ def format_alert_markdown(new: list[dict], drops: list[dict], date: str) -> str:
     return "\n".join(lines)
 
 
+def format_alert_pushover(
+    new: list[dict], drops: list[dict], date: str
+) -> tuple[str, str]:
+    """``(title, message)`` compact plain-text summary for a Pushover push.
+
+    Pushover caps messages at 1024 chars and doesn't render markdown, so this
+    lists at most a handful of items per section and points at the full
+    detail (dashboard / GitHub issue) for the rest.
+    """
+    title = f"🚗 {len(new)} new, {len(drops)} price drop(s) — {date}"
+    lines = []
+    for item in new[:5]:
+        label = item.get("_model_label", item.get("model", ""))
+        price = _money(item.get("current_price") or item.get("price"))
+        lines.append(f"NEW  {label}: {price}")
+    for d in drops[:5]:
+        item = d["listing"]
+        label = item.get("_model_label", item.get("model", ""))
+        old, new_p = d["old_price"], d["new_price"]
+        lines.append(f"DROP {label}: {_money(old)} -> {_money(new_p)}")
+    shown = min(len(new), 5) + min(len(drops), 5)
+    remaining = len(new) + len(drops) - shown
+    if remaining > 0:
+        lines.append(f"...and {remaining} more, see dashboard / GitHub issue")
+    message = "\n".join(lines) or "No details"
+    return title, message[:1024]
+
+
 # --- static HTML -----------------------------------------------------------
 
 _TEMPLATE_PATH = Path(__file__).with_name("report_template.html")
@@ -405,6 +463,21 @@ def _selfcheck() -> None:
     )
     assert "1 new listing" in md and "240 000 zł" in md and "-5.0%" in md, md
     assert _md_escape("Car](evil)") == "Car\\](evil)"
+
+    title, message = format_alert_pushover(
+        new=[{"_model_label": "Supra", "current_price": 240000}],
+        drops=[
+            {
+                "listing": {"_model_label": "LC"},
+                "old_price": 400000,
+                "new_price": 380000,
+            }
+        ],
+        date="2026-06-19",
+    )
+    assert "1 new, 1 price drop" in title, title
+    assert "NEW  Supra: 240 000 zł" in message and "DROP LC:" in message, message
+    assert len(message) <= 1024
 
     # OLS recovers a known linear relation: price = 100000 - 2*mileage(k) + ...
     coef = _ols([[10.0], [20.0], [30.0], [40.0]], [80.0, 60.0, 40.0, 20.0])

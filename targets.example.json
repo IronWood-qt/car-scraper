@@ -1,0 +1,36 @@
+{
+  "_comment": "Copy this file to targets.json (gitignored, never committed - see README) and edit freely: swap in your own make/model/filters, add/remove targets, keep or drop 'facets'. Both entries below are real, working targets you can scrape as-is to see the shape of things before customizing.",
+  "targets": [
+    {
+      "key": "toyota-gr86",
+      "label": "Toyota GR86 (manual)",
+      "sources": [
+        {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/toyota/gr86?search%5Bfilter_enum_gearbox%5D=manual"},
+        {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/toyota/gr-86?transmissionTypes=MANUAL"}
+      ],
+      "note": "Minimal target: no 'facets' block, just sources + a note to self. Manual GR86 (2.4 boxer)."
+    },
+    {
+      "key": "lexus-lc",
+      "label": "Lexus LC (500 V8 · 500h hybrid)",
+      "sources": [
+        {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/lexus/lc"},
+        {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/lexus/lc"}
+      ],
+      "note": "All LC; 'facets' below turns the V8/hybrid split and trim into dashboard filter chips - no code needed",
+      "facets": {
+        "variant": [
+          {"label": "500h", "keywords": ["500h", "hybrid"]},
+          {"label": "500", "keywords": ["500"]}
+        ],
+        "trim": [
+          {"label": "Superturismo Carbon", "keywords": ["superturismo carbon"]},
+          {"label": "Superturismo", "keywords": ["superturismo"]},
+          {"label": "Inspiration Series", "keywords": ["inspiration"]},
+          {"label": "Bespoke", "keywords": ["bespoke"]},
+          {"label": "Prestige", "keywords": ["prestige"]}
+        ]
+      }
+    }
+  ]
+}

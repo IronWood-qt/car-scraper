@@ -187,3 +187,19 @@ scripts/logs/
 # Alert payload (transient, consumed by the workflow) and cleanup backups
 data/alerts.md
 *.pre-clean
+
+# Generated dashboard (PNG plots + index.html) - rebuilt by `car-scraper plot`
+# / `report` and deployed straight to GitHub Pages by CI. Never committed:
+# full-render PNGs committed daily were the reason .git ballooned to ~390MB
+# over 15 months (see the "chore: squash history to shrink repo" commit).
+/plots/
+
+# Which cars you're tracking is private, not project config: never committed.
+# Copy targets.example.json -> targets.json and edit freely. CI gets its copy
+# from the TARGETS_JSON repo secret instead (see README).
+/targets.json
+
+# Scraped listings/prices are private too - never committed, in CI or
+# locally. This repo ships code only; the actual data lives wherever you run
+# it (self-hosted, e.g. docker-compose at home) and never leaves that box.
+/data/
