@@ -86,6 +86,12 @@ span[data-testid="stMainMenu"]{display:none;}
 [data-testid="stExpandSidebarButton"]{
     display:none;
 }
+/* stSidebarCollapseButton's icon is hardcoded to the "collapse" (left-
+   pointing) chevron regardless of state - since it now also serves as
+   the "expand" toggle while collapsed, flip it to point right there. */
+[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"]{
+    transform:rotate(180deg);
+}
 </style>
 """
 
