@@ -69,6 +69,11 @@ _COLUMN_LABELS = {
 }
 
 st.set_page_config(page_title="Car Tracker", page_icon="🚗", layout="wide")
+# Streamlit's default block-container top padding leaves a lot of dead space
+# above the title on a wide layout with no page description - trim it.
+st.markdown(
+    "<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True
+)
 store = open_default_store(DB_PATH)
 
 
