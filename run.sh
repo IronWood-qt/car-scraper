@@ -55,4 +55,8 @@ if [ "${1:-}" = "scrape" ]; then
 fi
 
 "$VENV/bin/pip" install -q -r dashboard/requirements.txt
-exec "$VENV/bin/streamlit" run "dashboard/🚗_Dashboard.py"
+# showSidebarNavigation=false: dashboard/_nav.py renders its own Dashboard
+# (top) / Settings (bottom) links instead of Streamlit's default top-only
+# page list - see that module's docstring.
+exec "$VENV/bin/streamlit" run "dashboard/🚗_Dashboard.py" \
+  --client.showSidebarNavigation=false

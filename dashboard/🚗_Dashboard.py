@@ -39,6 +39,8 @@ import streamlit as st
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from _nav import render_nav  # noqa: E402
+
 from src.facets import classify  # noqa: E402
 from src.settings_store import SettingsStore  # noqa: E402
 from src.target_store import TargetStoreError, open_default_store  # noqa: E402
@@ -69,18 +71,6 @@ _COLUMN_LABELS = {
 }
 
 st.set_page_config(page_title="Car Tracker", page_icon="🚗", layout="wide")
-# Streamlit's default block-container top padding leaves dead space above the
-# title on a wide layout with no page description - trim it. The header bar
-# (Deploy button / hamburger menu - meant for Streamlit Community Cloud, not
-# a self-hosted app) is hidden too; its sidebar-collapse control lives in a
-# separate element so this doesn't break that.
-st.markdown(
-    "<style>"
-    "div.block-container{padding-top:0.5rem;}"
-    "header[data-testid='stHeader']{display:none;}"
-    "</style>",
-    unsafe_allow_html=True,
-)
 store = open_default_store(DB_PATH)
 
 
@@ -354,6 +344,7 @@ def _render_add_target_form() -> None:
 
 
 def _render_grid(targets: list) -> None:
+    render_nav()
     st.title("🚗 Car Tracker")
     if not targets:
         st.info("Nothing tracked yet - add your first target below.")
@@ -687,20 +678,21 @@ def _render_overview_tab(t: dict) -> None:
 
 
 def _render_detail(t: dict) -> None:
-    with st.sidebar:
+    def _sidebar_extra() -> None:
         if st.button("← All cars"):
             st.query_params.clear()
             st.rerun()
-        st.subheader("Filters")
         sources = t.get("sources") or []
         if sources:
             for i, s in enumerate(sources):
                 site_label = s.get("site") or (
                     f"source {i + 1}" if len(sources) > 1 else "otomoto"
                 )
-                st.link_button(f"🔗 Go to {site_label}", s["url"], width="stretch")
+                st.link_button(f"🔗 {site_label}", s["url"], width="stretch")
         else:
             st.caption("No otomoto URL yet - add one in the Settings tab.")
+
+    render_nav(_sidebar_extra)
 
     img_url = _target_image(t["key"])
     if img_url:

@@ -11,20 +11,21 @@ from pathlib import Path
 
 import streamlit as st
 
+# dashboard/ (this page's parent) on sys.path for `from _nav import
+# render_nav` - already there via the main script's own sys.path[0] in the
+# same running process, but explicit here too in case a page is ever
+# entered first. Repo root (parent of dashboard/) for `from src...`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
+from _nav import render_nav  # noqa: E402
 
 from src.settings_store import SettingsStore  # noqa: E402
 
 DB_PATH = os.environ.get("TARGETS_DB")
 
 st.set_page_config(page_title="App Settings", page_icon="⚙️", layout="wide")
-st.markdown(
-    "<style>"
-    "div.block-container{padding-top:0.5rem;}"
-    "header[data-testid='stHeader']{display:none;}"
-    "</style>",
-    unsafe_allow_html=True,
-)
+render_nav()
 st.title("⚙️ App Settings")
 st.caption(
     "Global scraper/alert config - stored in targets.db, never committed to "

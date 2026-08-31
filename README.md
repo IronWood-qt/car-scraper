@@ -68,7 +68,7 @@ widgets:
 3. On the dashboard's main grid, **➕ Add target** with just a label. It
    opens straight to that new card's **⚙️ Settings** tab - paste the URL
    into **Sources** there and save.
-4. From then on, that car's page has a **🔗 Go to otomoto** button in the
+4. From then on, that car's page has a **🔗 otomoto** button in the
    sidebar - click it any time to re-open the *same* search live, tweak
    filters, and paste the refreshed URL back into Settings.
 
@@ -197,12 +197,18 @@ reinventing filter widgets:
   - **⚙️ Settings** — label, note, source URLs (see [🎯 Tracked
     targets](#-tracked-targets) above), optional facet-chip rules, and
     delete.
-  - The sidebar also has a **🔗 Go to otomoto** (/autoplac) button per
-    source - opens that exact search live on the site, for rebuilding
-    filters or just manually browsing the listings yourself.
+  - The sidebar also has a **🔗 otomoto** (/autoplac) button per source -
+    opens that exact search live on the site, for rebuilding filters or
+    just manually browsing the listings yourself.
 - **⚙️ App Settings** — max pages per target, the scraper container's loop
   interval, Pushover credentials, the dashboard URL alerts link to - see
   below. Global, not per-car.
+
+The sidebar itself always has **🚗 Dashboard** pinned to the top and **⚙️
+Settings** pinned to the bottom (Streamlit's own auto-generated page list is
+turned off - see `--client.showSidebarNavigation=false` in `run.sh` /
+`dashboard/Dockerfile` - so `dashboard/_nav.py` can render that layout
+instead); collapse/expand it with the arrow at the top.
 
 Point the compose volumes at a home server / NAS and it's a permanent,
 private web dashboard on your own network — nothing about what you track or
