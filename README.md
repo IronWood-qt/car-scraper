@@ -2,19 +2,52 @@
 
 [![Tests](https://github.com/IronWood-qt/car-scraper/actions/workflows/test.yml/badge.svg)](https://github.com/IronWood-qt/car-scraper/actions/workflows/test.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Poetry](https://img.shields.io/badge/dependency--management-poetry-blue)](https://python-poetry.org/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-A CLI that scrapes car listings from otomoto.pl with time-series price tracking,
-analysis, and visualization. Listing data is read straight from otomoto's
-embedded structured data (clean price / year / mileage / engine power / gearbox
-/ fuel type), so no fragile per-advert HTML scraping.
+Scrapes car listings from otomoto.pl (+ autoplac.pl) with time-series price
+tracking, shown in a self-hosted web dashboard. Listing data is read straight
+from otomoto's embedded structured data (clean price / year / mileage /
+engine power / gearbox / fuel type), so no fragile per-advert HTML scraping.
 
 **Self-hosted by design**: both what you're searching for (`targets.db`) and
 what it finds (`data/`) are gitignored and never committed, in this repo or a
 fork, locally or in CI — this repo is code only. Run it wherever you control
-the storage (a home server, a NAS, `docker compose up`); see [🖥️
-Dashboards](#️-dashboards) below.
+the storage (a home server, a NAS, `./run.sh` or `docker compose up` - see
+[🚀 Installation](#-installation)).
+
+## 🚀 Installation
+
+No Poetry needed to just *run* things - `run.sh` sets up a plain
+`python3 -m venv` + `pip` on first use (finds a Python 3.10+ interpreter
+itself) and you're done.
+
+### `run.sh` (recommended for local/bare-metal use)
+
+```bash
+./run.sh          # dashboard -> http://localhost:8501 (the only thing you run by hand)
+./run.sh scrape    # one-off manual scrape-all, for debugging
+```
+
+Everything else - which cars to track, max pages, Pushover, the scraper's
+schedule - is a page in the dashboard now (🎯 Manage Targets / ⚙️ Settings),
+not a flag here.
+
+### Docker Compose (recommended for self-hosted/homelab)
+
+The full stack (dashboard + a scheduled scraper container, no host cron) -
+see [🖥️ Dashboards](#️-dashboards) below:
+
+```bash
+touch targets.db
+docker compose up
+```
+
+### Poetry (for development)
+
+Only needed for dev tooling (pytest/ruff/mypy/pre-commit) - see [💻 Local
+Development](#-local-development) below. `poetry install --with dev` also
+works fine as a third way to just run things, if you'd rather have Poetry
+manage the venv than `run.sh`'s plain one.
 
 ## 🎯 Tracked targets
 
@@ -24,24 +57,16 @@ never touches git history, on any branch, in this repo or a fork. The
 listings it finds (`data/`) are gitignored too, for the same reason — see
 [🖥️ Dashboards](#️-dashboards).
 
-Edit it from the dashboard's **🎯 Manage Targets** page (add/edit/delete,
-form-based - see the screenshot in 🖥️ Dashboards) or from the CLI:
+Manage it entirely from the dashboard's **🎯 Manage Targets** page:
+add/edit/delete, a real form (rows for `sources` and for each `facets`
+rule, not JSON text). `targets.db` is created automatically the first time
+anything touches it. If you have an old `targets.json` lying around from
+before targets.db existed, that first run auto-imports it once - nothing to
+do by hand. Otherwise, [`targets.example.json`](targets.example.json) is a
+real, working file you can import as a starting point (the "Import from a
+JSON file" section on the Manage Targets page) and then edit from there.
 
-```bash
-poetry run python main.py targets list                       # what's tracked
-poetry run python main.py targets import targets.example.json # seed from a file
-poetry run python main.py targets remove some-key
-```
-
-`targets.db` is created automatically the first time anything touches it
-(dashboard, CLI, or `scrape-all`). If you have an old `targets.json` lying
-around from before targets.db existed, that first run auto-imports it once
-- nothing to do by hand. Otherwise, [`targets.example.json`](targets.example.json)
-is a real, working file you can import as a starting point (see the CLI
-snippet above, or the "Import from a JSON file" section on the Manage
-Targets page) and then edit from there.
-
-Each target has:
+Each target is, conceptually:
 
 ```json
 {
@@ -64,24 +89,23 @@ Each target has:
   }
 }
 ```
-(that's the JSON *import* shape - the Manage Targets page itself is a proper
-form: add/remove rows for `sources` and for each `facets` rule, not JSON text.
-Stored relationally in `targets.db`, key is the primary key, see
-[`src/target_store.py`](src/target_store.py).)
+(that's the JSON *import* shape / roughly what the Manage Targets form's
+fields map to - it's stored relationally in `targets.db`, key is the primary
+key, see [`src/target_store.py`](src/target_store.py).)
 
 `sources` may be a single entry or several — listings from every source are
 merged into one data file per `key`, deduplicated by listing id. `site` is
 just documentation; the scraper is actually picked per-URL by domain, so any
-otomoto.pl / autoplac.pl search URL works. A bare `{"url": "..."}` (no
-`sources` array) also still works for a single-source target. Useful filter
-patterns: otomoto takes a model-year floor as a path segment
-(`/od-2025`), autoplac as a query param (`?yearFrom=2025`); both support
-`search[filter_enum_gearbox]=manual` / `transmissionTypes=MANUAL` and
-similar facet filters — copy them straight from the site's own search UI.
-otomoto's model URL slug is sometimes hyphenated where the display name
-isn't (e.g. Volvo XC90 → `xc-90`) — an unrecognized slug doesn't error, it
-silently falls back to an unfiltered brand-wide search, so **check the result
-count/listings actually match what you expect** before trusting a new URL.
+otomoto.pl / autoplac.pl search URL works. Useful filter patterns: otomoto
+takes a model-year floor as a path segment (`/od-2025`), autoplac as a query
+param (`?yearFrom=2025`); both support `search[filter_enum_gearbox]=manual` /
+`transmissionTypes=MANUAL` and similar facet filters — copy them straight
+from the site's own search UI (see also "Origin filtering" under 🖥️
+Dashboards). otomoto's model URL slug is sometimes hyphenated where the
+display name isn't (e.g. Volvo XC90 → `xc-90`) — an unrecognized slug
+doesn't error, it silently falls back to an unfiltered brand-wide search, so
+**check the result count/listings actually match what you expect** before
+trusting a new URL.
 
 `facets` (optional) is what turns a variant/trim into filter chips on the
 dashboard, entirely from config — no code needed for a new car. Each
@@ -106,13 +130,14 @@ between runs (see that workflow's file header for why). If you ever do want
 to manually trigger it, it checks out the repo fresh and so has neither;
 give it a copy of your targets via a repo secret instead: *Settings → Secrets
 and variables → Actions → New repository secret* → name `TARGETS_JSON`,
-value = `targets.example.json`-shaped JSON (export yours with `poetry run
-python -c "from src.target_store import TargetStore; TargetStore().export_json('out.json')"`).
-The workflow writes it to `targets.json`, which the first `scrape-all` call
-auto-imports into a fresh `targets.db` right there in the runner - fails
-fast (with a clear error) if the secret is unset or the JSON is invalid, and
-it's never logged (secrets are masked) or written anywhere but the ephemeral
-runner's disk.
+value = `targets.example.json`-shaped JSON (export yours with
+`.venv/bin/python -c "from src.target_store import TargetStore;
+TargetStore().export_json('out.json')"` after `./run.sh` once so `.venv`
+exists). The workflow writes it to `targets.json`, which the first run of
+`main.py` auto-imports into a fresh `targets.db` right there in the runner -
+fails fast (with a clear error) if the secret is unset or the JSON is
+invalid, and it's never logged (secrets are masked) or written anywhere but
+the ephemeral runner's disk.
 
 ## 🖥️ Dashboards
 
@@ -120,34 +145,37 @@ runner's disk.
 
 ```bash
 touch targets.db          # first time only - see the docker-compose.yml comment for why
-cp .env.example .env      # optional: Pushover creds, scrape interval - see .env.example
+cp .env.example .env      # optional: Pushover creds - see .env.example
 docker compose up         # -> http://localhost:8501
 ```
 
-Two containers: `dashboard` (the web UI, below) and `scraper` (runs
-`scrape-all` on a loop, keeping `data/` fresh - see [🤖
-Scheduling](#-scheduling)). Nothing to run on the host, nothing to leave
-running in a terminal.
+Two containers: `dashboard` (the web UI, below) and `scraper` (runs a
+scrape on a loop, keeping `data/` fresh - see [🤖 Scheduling](#-scheduling)).
+Nothing to run on the host, nothing to leave running in a terminal.
 
-The dashboard itself is a Streamlit app with two pages (sidebar nav): the
-main view (model/year filters, price-over-time charts, a sortable linked
-table, reading `data/` straight off disk) and **🎯 Manage Targets**
-(add/edit/delete tracked cars, form-based, backed by `targets.db` - see [🎯
-Tracked targets](#-tracked-targets) above). Point the compose volumes at a
-home server / NAS and it's a permanent, private web dashboard on your own
-network — nothing about what you track or find ever leaves that box.
+The dashboard itself is a Streamlit app with three pages (sidebar nav):
 
-Every listing also gets an **origin** (country, from otomoto's structured
-field or free text) and a **condition** (bezwypadkowy/powypadkowy/uszkodzony,
-text-only) column in the table - see [`src/facets.py`](src/facets.py). No
-filter widgets for either by design: narrowing what you *track* belongs in
-the target's search URL, not a runtime filter layered on top of already-
-scraped data - see "Origin filtering" right below. Click a column header to
-sort by it instead. otomoto's search results carry no structured accident/
-damage field (only the individual advert page does, which this project
-deliberately doesn't scrape), so condition is a text match against the
-title/description and **a miss means "not mentioned," not "confirmed
-undamaged"** - useful to eyeball, not a guarantee.
+- **🚗 Dashboard** — model/year filters, price-over-time charts, a sortable
+  linked table, reading `data/` straight off disk. Every listing also gets
+  an **origin** (country) and a **condition**
+  (bezwypadkowy/powypadkowy/uszkodzony) column - both text-derived (see
+  [`src/facets.py`](src/facets.py)), no filter widgets for either by design:
+  narrowing what you *track* belongs in the target's search URL, not a
+  runtime filter layered on top of already-scraped data (see "Origin
+  filtering" below) - click a column header to sort instead. otomoto's
+  search results carry no structured accident/damage field (only the
+  individual advert page does, which this project deliberately doesn't
+  scrape), so condition is a text match against the title/description and
+  **a miss means "not mentioned," not "confirmed undamaged."**
+- **🎯 Manage Targets** — add/edit/delete tracked cars, form-based - see [🎯
+  Tracked targets](#-tracked-targets) above.
+- **⚙️ Settings** — max pages per target, the scraper container's loop
+  interval, Pushover credentials, the dashboard URL alerts link to - see
+  below.
+
+Point the compose volumes at a home server / NAS and it's a permanent,
+private web dashboard on your own network — nothing about what you track or
+find ever leaves that box.
 
 ### Origin filtering
 
@@ -163,209 +191,37 @@ URL in Manage Targets, e.g. for USA-only:
 (verified live: narrows 237 XC90 results down to exactly the USA-imported
 ones).
 
-There's also `car-scraper report`, which writes a self-contained, interactive
-`plots/index.html` (Plotly, no server) plus per-model PNGs under
-`plots/{model}/` — handy for a quick static snapshot, or to publish somewhere
-yourself if you ever do want a public view. `data/`, `plots/` and `targets.db`
-are all gitignored (see [🎯 Tracked targets](#-tracked-targets) above) -
-generated/edited locally, never committed, so none of it grows the repo
-either.
+## ⚙️ Settings
+
+The dashboard's Settings page, backed by `targets.db` (see
+[`src/settings_store.py`](src/settings_store.py)):
+
+| Setting | Default | Notes |
+|---|---|---|
+| Max pages per target | 10 | Passed to every target's search during a scrape |
+| Scraper loop interval | 6h | `docker-compose.yml`'s `scraper` container re-reads this **every cycle** - change it and the next sleep picks it up, no restart needed |
+| Pushover application token / user key | unset | See [🔔 Alerts](#-alerts) |
+| Dashboard URL | unset | Linked from Pushover alerts |
+
+Every field also has an env var fallback (`PUSHOVER_TOKEN`, `PUSHOVER_USER`,
+`DASHBOARD_URL` - see [`.env.example`](.env.example)) used only when the
+Settings-page value is empty - handy if you'd rather not put secrets in
+`targets.db`, or want them set before you've opened the dashboard once.
 
 ## 🔔 Alerts
 
-Every `car-scraper scrape-all` run that finds a new listing or a price drop
-can fire two channels:
+Every scrape that finds a new listing or a price drop can fire two channels:
 
 - **Pushover push notification** — a compact summary (title + up to 5 items
   per section) sent to your phone/desktop via [Pushover](https://pushover.net).
-  Opt-in: `export PUSHOVER_TOKEN=... PUSHOVER_USER=...` (application token +
-  user/group key) before running `scrape-all`; without them this silently
-  no-ops. This is the channel that actually fits self-hosted use.
+  Configure via the Settings page (or `PUSHOVER_TOKEN`/`PUSHOVER_USER`, see
+  above); unset on both means this silently no-ops. This is the channel that
+  actually fits self-hosted use.
 - **GitHub issue** — opens (or comments on) an issue titled **"🚗 Car
-  alerts"**, only when `scrape-all` runs inside the (disabled-by-default,
+  alerts"**, only when a scrape runs inside the (disabled-by-default,
   manual-only) GitHub Actions workflow — see [🎯 Tracked
   targets](#-tracked-targets) above. Not applicable when you run this
   yourself locally/self-hosted.
-
-## ✨ Features
-
-- **Model-Specific Organization**: Separate data directories and plots for each car model
-- **Advanced Scraping**: Extract car listings with prices, specifications, and metadata
-- **Time Series Tracking**: Monitor individual listings over time for price analysis
-- **Rich Visualizations**: Generate comprehensive plots and analysis charts organized by model
-- **Multiple Data Formats**: Support for both CSV and JSON data formats
-- **Professional CLI**: Modern Click-based command-line interface
-- **Modular Architecture**: Clean, maintainable codebase following PEP standards
-- **Type Safety**: Full type hints with Pydantic data validation
-- **Quality Tooling**: Ruff (lint + format), mypy, bandit, and pytest
-- **Docker Support**: Self-hosted deployment via `docker compose up` (see 🖥️ Dashboards)
-- **Push Alerts**: Pushover notifications on new listings / price drops
-
-## 🚀 Installation
-
-### Poetry (Recommended)
-
-1. **Install dependencies**:
-```bash
-poetry install
-```
-
-2. **Activate virtual environment**:
-```bash
-poetry shell
-```
-
-3. **Use the CLI**:
-```bash
-car-scraper --help
-```
-
-### Pip Installation
-
-1. **Install in development mode**:
-```bash
-pip install -e .
-```
-
-2. **Use the CLI**:
-```bash
-car-scraper --help
-```
-
-### Docker
-
-This is the standalone CLI image (`ENTRYPOINT python main.py`) - for the full
-self-hosted stack (dashboard + scheduled scraper together), use `docker
-compose up` instead, see [🖥️ Dashboards](#️-dashboards).
-
-1. **Build the Docker image**:
-```bash
-docker build -t car-scraper .
-```
-
-2. **Run with Docker**:
-```bash
-docker run -v $(pwd)/data:/app/data -v $(pwd)/targets.db:/app/targets.db car-scraper scrape-all
-```
-
-## 📖 Usage
-
-### Quick Start
-
-```bash
-# Scrape every target in targets.db - run this on your own schedule
-car-scraper scrape-all --max-pages 5
-
-# Build the interactive static dashboard (plots/index.html)
-car-scraper report
-
-# Local Docker dashboard at http://localhost:8501
-docker compose up
-```
-
-### Single-model commands
-
-```bash
-# Simple mode - specify manufacturer and model
-car-scraper scrape --manufacturer lexus --model lc --max-pages 2
-
-# Advanced mode - use URL for specific queries
-car-scraper scrape --url "https://www.otomoto.pl/osobowe/lexus/lc?custom=filters" --max-pages 2
-
-# Generate all plots
-car-scraper plot --model "lexus-lc" --plot-type "all"
-
-# Check data status
-car-scraper status
-```
-
-### Available Commands
-
-#### 🔍 Scraping
-
-The scraper supports two modes for flexibility:
-
-**Simple Mode** - Auto-generates URL from manufacturer and model:
-```bash
-# Basic scraping
-car-scraper scrape --manufacturer lexus --model lc
-
-# With options
-car-scraper scrape \
-    --manufacturer bmw \
-    --model i8 \
-    --max-pages 5 \
-    --delay 2.0 \
-    --format json
-```
-
-**Advanced Mode** - Use custom URLs for specific queries:
-```bash
-# Custom URL (auto-detects manufacturer/model)
-car-scraper scrape --url "https://www.otomoto.pl/osobowe/lexus/lc?specific=filters"
-
-# URL with overrides
-car-scraper scrape \
-    --url "https://www.otomoto.pl/osobowe/lexus/lc" \
-    --manufacturer lexus \
-    --model lc-special \
-    --max-pages 3
-```
-
-#### 📊 Plotting
-
-```bash
-# Generate all plots
-car-scraper plot --model "lexus-lc" --plot-type "all"
-
-# Generate specific plot types
-car-scraper plot --model "lexus-lc" --plot-type "individual"  # Price trends
-car-scraper plot --model "lexus-lc" --plot-type "year"       # Year analysis
-```
-
-#### 📋 Status
-
-```bash
-# Check data status
-car-scraper status
-```
-
-## 🏗️ Project Structure
-
-```
-car-scraper/
-├── src/
-│   ├── target_store.py        # SQLite CRUD for targets.db (stdlib-only, shared by CLI + dashboard)
-│   ├── facets.py               # Origin/condition/variant/trim classification (stdlib-only, shared)
-│   └── car_scraper/            # Main package
-│       ├── models/                # Pydantic data models
-│       ├── scrapers/              # Web scraping modules
-│       ├── storage/               # Data persistence
-│       ├── plotters/              # Visualization modules
-│       └── utils/                 # Utilities and helpers
-├── dashboard/                  # Streamlit web UI (standalone container - see dashboard/Dockerfile)
-│   ├── 🚗_Dashboard.py             # Main page: browse listings/charts
-│   └── pages/
-│       └── 1_🎯_Manage_Targets.py    # Add/edit/delete targets
-├── data/                      # Model-specific data storage (gitignored, not committed)
-│   ├── {model}/               # Per-model directories
-│   │   └── {model}.json       # Unified data file with listings and price history
-│   └── ...                    # Additional models
-├── targets.db                 # SQLite: tracked targets (gitignored, not committed)
-├── plots/                     # Generated dashboard (gitignored, not committed)
-│   ├── index.html             # Interactive Plotly dashboard (static, optional)
-│   ├── {model}/               # Per-model plot directories
-│   │   ├── year_analysis.png  # Year-based analysis
-│   │   ├── price_vs_mileage.png # Value correlation
-│   │   └── listings_by_year.png # Distribution plots
-│   └── ...                    # Additional models
-├── tests/                     # Test suite
-├── .github/workflows/         # GitHub Actions
-├── Dockerfile                  # CLI image (ENTRYPOINT: main.py) - the scraper service uses this
-├── docker-compose.yml          # Full stack: dashboard + scheduled scraper
-├── .env.example                 # Pushover creds / scrape interval - copy to .env
-└── main.py                    # CLI entry point
-```
 
 ## 🤖 Scheduling
 
@@ -375,32 +231,58 @@ there between runs, so a GitHub-hosted schedule would just re-report every
 listing as "new" on every run.
 
 `docker compose up` runs the scheduling itself now: alongside `dashboard`, a
-`scraper` container loops `car-scraper scrape-all` on an interval (default 6h,
-`SCRAPE_INTERVAL_SECONDS` in `.env` - see `.env.example`), sharing the same
-`./data` and `./targets.db` the dashboard reads/edits. No host cron needed;
-`docker compose logs -f scraper` to watch it, `docker compose restart
-scraper` to force an immediate run. It's a plain `while true; sleep` loop
-(see the `command:` in `docker-compose.yml`), not a real cron daemon - fine
-for one periodic job, but note a restart of the container resets the wait
-(no persisted "last ran at").
+`scraper` container loops a scrape on an interval (default 6h, editable on
+the Settings page - see above), sharing the same `./data` and `./targets.db`
+the dashboard reads/edits. No host cron needed; `docker compose logs -f
+scraper` to watch it, `docker compose restart scraper` to force an
+immediate run. It's a plain `while true; sleep` loop (see the `command:` in
+`docker-compose.yml`), not a real cron daemon - fine for one periodic job,
+but note a restart of the container resets the wait (no persisted "last ran
+at").
 
 Prefer bare metal, or want a schedule cron actually understands? Skip the
-`scraper` service and use a host cron job / systemd timer calling `poetry
-run python main.py scrape-all --max-pages 5` from the repo checkout instead
-- it writes into the same `./data` the dashboard container mounts either way.
+`scraper` service and use a host cron job / systemd timer calling
+`./run.sh scrape` from the repo checkout instead - it writes into the same
+`./data` the dashboard container mounts either way.
 
 [`daily-scrape.yml`](.github/workflows/daily-scrape.yml) still exists,
 manual-dispatch-only, if you ever want to run it once in GitHub Actions
-anyway (e.g. to sanity-check the Pages deploy step) — see [Optional:
-the `TARGETS_JSON` CI secret](#optional-the-targets_json-ci-secret) above for
-what it needs.
+anyway — see [Optional: the `TARGETS_JSON` CI
+secret](#optional-the-targets_json-ci-secret) above for what it needs.
+
+## 🏗️ Project Structure
+
+```
+car-scraper/
+├── src/
+│   ├── target_store.py         # SQLite CRUD for targets.db (stdlib-only, shared by CLI + dashboard)
+│   ├── settings_store.py       # SQLite CRUD for Settings (stdlib-only, shared)
+│   ├── facets.py                # Origin/condition/variant/trim classification (stdlib-only, shared)
+│   └── car_scraper/             # Main package
+│       ├── scrapers/               # otomoto.pl / autoplac.pl search-page scraping
+│       ├── storage/                # data/*.json persistence + price-history tracking
+│       └── utils/                  # Logging, DataProcessor
+├── dashboard/                   # Streamlit web UI (standalone container - see dashboard/Dockerfile)
+│   ├── 🚗_Dashboard.py              # Main page: browse listings/charts
+│   └── pages/
+│       ├── 1_🎯_Manage_Targets.py     # Add/edit/delete targets
+│       └── 2_⚙️_Settings.py           # Max pages, scrape interval, Pushover, dashboard URL
+├── data/                        # Model-specific data storage (gitignored, not committed)
+│   └── {model}/{model}.json        # Unified data file: listings + full price history
+├── targets.db                   # SQLite: tracked targets + settings (gitignored, not committed)
+├── tests/                       # Test suite
+├── .github/workflows/           # GitHub Actions (tests; a disabled/manual scrape workflow)
+├── Dockerfile                    # CLI image (ENTRYPOINT: main.py) - the scraper service uses this
+├── docker-compose.yml            # Full stack: dashboard + scheduled scraper
+├── .env.example                   # Pushover creds / dashboard URL fallback - copy to .env
+├── run.sh                        # No-Poetry entry point (dashboard by default)
+└── main.py                      # scrape-all engine (invoked by run.sh/docker-compose, not by hand)
+```
 
 ## 💻 Local Development
 
-### Setting Up Development Environment
-
 ```bash
-# Install development dependencies
+# Install dev dependencies (pytest/ruff/mypy/pre-commit) + everything to run things too
 poetry install --with dev
 
 # Install pre-commit hooks
@@ -417,154 +299,9 @@ poetry run ruff check --fix .
 poetry run ruff format .
 ```
 
-## 📊 CLI Command Reference
-
-### 🔍 `scrape` - Extract Car Listings
-
-```bash
-car-scraper scrape [OPTIONS]
-```
-
-**Options:**
-- `--url TEXT` - Search URL from otomoto.pl (required)
-- `--model TEXT` - Model name to save data as (required)
-- `--data-dir TEXT` - Directory to save data (default: ./data)
-- `--max-pages INTEGER` - Maximum number of pages to scrape (default: 10)
-- `--format [csv|json]` - Output format (default: csv)
-- `--delay FLOAT` - Delay between requests in seconds (default: 1.0)
-
-**Examples:**
-```bash
-# Basic scraping
-car-scraper scrape --url "https://www.otomoto.pl/osobowe/lexus/lc" --model "lexus-lc"
-
-# Advanced options
-car-scraper scrape \
-  --url "https://www.otomoto.pl/osobowe/lexus/lc" \
-  --model "lexus-lc" \
-  --max-pages 3 \
-  --delay 2.0 \
-  --format json
-```
-
-### 📊 `plot` - Generate Visualizations
-
-```bash
-car-scraper plot [OPTIONS]
-```
-
-**Options:**
-- `--model TEXT` - Model name to generate plots for (required)
-- `--data-dir TEXT` - Directory containing data (default: ./data)
-- `--plot-type [all|individual|year]` - Type of plots to generate (default: all)
-- `--output-dir TEXT` - Directory to save plots (default: ./plots)
-
-**Plot Types:**
-- `individual` - Individual listing price trends over time
-- `year` - Year-based analysis (price vs year, mileage analysis)
-- `all` - Generate all plot types
-
-**Examples:**
-```bash
-# Generate all plots
-car-scraper plot --model "lexus-lc"
-
-# Generate specific plot type
-car-scraper plot --model "lexus-lc" --plot-type "year"
-```
-
-### 📋 `status` - Data Status Report
-
-```bash
-car-scraper status [OPTIONS]
-```
-
-**Options:**
-- `--data-dir TEXT` - Directory containing data (default: ./data)
-
-**Output:**
-- Models found and record counts
-- File sizes and last update times
-- Data directory structure overview
-
-### 🚙 `scrape-all` - Scrape Every Tracked Target
-
-```bash
-car-scraper scrape-all [OPTIONS]
-```
-
-This is what you'd put on a schedule (see [🤖 Scheduling](#-scheduling)).
-Reads every target from `targets.db`, merges each target's sources into one
-data file, and writes an alert body (Pushover + `data/alerts.md` for the
-GitHub-issue step) if anything is new or dropped in price.
-
-**Options:**
-- `--db TEXT` - targets.db path (default: `$TARGETS_DB` or `./targets.db`)
-- `--data-dir TEXT` - Directory to save data (default: `./data`)
-- `--max-pages INTEGER` - Maximum pages per target (default: 10)
-- `--alerts-file TEXT` - Where to write the alert body (default: `data/alerts.md`)
-
-### 🖥️ `report` - Build the Static HTML Dashboard
-
-```bash
-car-scraper report [OPTIONS]
-```
-
-Writes the self-contained `plots/index.html` (see [🖥️ Dashboards](#️-dashboards)).
-
-**Options:**
-- `--data-dir TEXT` - Directory containing data (default: `./data`)
-- `--output TEXT` - Output HTML file (default: `plots/index.html`)
-- `--db TEXT` - targets.db path (default: `$TARGETS_DB` or `./targets.db`)
-
-### 🎯 `targets` - Manage Tracked Targets
-
-```bash
-car-scraper targets list [--db PATH]
-car-scraper targets import JSON_FILE [--db PATH] [--overwrite]
-car-scraper targets remove KEY [--db PATH]
-```
-
-CLI counterpart to the dashboard's Manage Targets page - see [🎯 Tracked
-targets](#-tracked-targets) above for the full picture (schema, auto-import
-from a legacy `targets.json`, the `facets` config). Adding/editing a target
-with full control (`sources`/`facets`) is form-based on the dashboard; the
-CLI covers listing, bulk import, and removal.
-
 ## 📁 Data Structure
 
-### Raw Data Files
-```
-data/
-├── {model}/                  # Model-specific directories
-│   └── {model}.json         # Unified data file with listings, price history, and metadata
-└── ...                      # Additional models
-
-plots/
-├── {model}/                 # Model-specific plot directories
-│   ├── year_analysis.png    # Comprehensive year analysis
-│   ├── price_vs_mileage.png # Price-mileage correlation
-│   ├── listings_by_year.png # Distribution by year
-│   └── ...                  # Additional plot types
-└── ...                      # Additional models
-```
-
-### Data Fields
-
-Each scraped listing contains:
-- `id` - Unique listing identifier from otomoto.pl
-- `title` - Car title/description
-- `price` - Price in PLN (Polish Złoty)
-- `year` - Manufacturing year
-- `mileage` - Mileage in kilometers (optional)
-- `url` - Direct link to the listing
-- `model` - Model name (as specified during scraping)
-- `scrape_date` - Date of scraping (YYYY-MM-DD)
-- `scrape_timestamp` - Unix timestamp of scraping
-
-### Simplified Storage Format
-
-The new simplified storage system uses a single JSON file per model with the following structure:
+Each model gets one file, `data/{model}/{model}.json`:
 
 ```json
 {
@@ -586,44 +323,26 @@ The new simplified storage system uses a single JSON file per model with the fol
       "first_seen": "2025-05-31",
       "last_seen": "2025-05-31",
       "price_readings": [
-        {
-          "price": 450000,
-          "date": "2025-05-31",
-          "timestamp": 1732890123
-        }
+        {"price": 450000, "date": "2025-05-31", "timestamp": 1732890123}
       ]
     }
   }
 }
 ```
 
-This format provides:
-- **Integrated price tracking** - All price history within each listing
-- **Simplified file structure** - Single JSON file per model
-- **Metadata tracking** - Summary statistics and model information
-- **Historical preservation** - Maintains listings even when they're no longer active
+Price history is integrated - every reading for a listing lives in its own
+`price_readings`, so the file is a complete, append-only record even as
+listings go inactive (kept, not deleted, when they drop off a search).
 
 ## 🛠️ Technical Details
 
-### Architecture
-
-- **Modular Design**: Separated concerns (scraping, storage, plotting, utilities)
-- **Type Safety**: Full type hints with Pydantic validation
-- **Error Handling**: Comprehensive error handling and logging
-- **Async Support**: Built for future async/concurrent scraping
-- **Extensible**: Easy to add new car models and data sources
-
 ### Technologies
 
-- **Python 3.10+** - Modern Python with type hints
-- **Poetry** - Dependency management and packaging
-- **Click** - Command-line interface framework
-- **Pydantic** - Data validation and settings management
-- **BeautifulSoup4** - HTML parsing and web scraping
-- **Pandas** - Data manipulation and analysis
-- **Matplotlib** - Data visualization and plotting
-- **Loguru** - Structured logging
-- **HTTPX** - HTTP client for web requests
+- **Python 3.10+**, **Poetry** for dependency management (dev tooling only - see 🚀 Installation)
+- **Click** - the one remaining CLI command (`main.py`'s scrape engine)
+- **Streamlit + Plotly + Pandas** - the dashboard (standalone, see `dashboard/requirements.txt`)
+- **Pydantic**, **HTTPX**, **BeautifulSoup4/lxml**, **Loguru** - scraping + validation
+- **SQLite** (stdlib `sqlite3`, WAL mode) - `targets.db` (targets + settings), shared safely between the dashboard and scraper containers
 
 ### Quality Assurance
 
@@ -668,13 +387,3 @@ If you encounter any issues or have suggestions for improvements:
    - Operating system
    - Error messages or unexpected behavior
    - Steps to reproduce
-
-## 🚀 Future Enhancements
-
-- [ ] Additional car websites support
-- [ ] Real-time price alerts
-- [ ] Advanced filtering options
-- [ ] Web dashboard interface
-- [ ] Machine learning price predictions
-- [ ] Database storage backend
-- [ ] API endpoints for data access
