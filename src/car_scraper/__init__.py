@@ -21,7 +21,6 @@ from src.car_scraper.models import (
     ScrapingResults,
     YearAnalysisData,
 )
-from src.car_scraper.plotters import IndividualListingsPlotter, YearAnalysisPlotter
 from src.car_scraper.scrapers import CarScraper
 from src.car_scraper.storage import SimplifiedListingsStorage
 from src.car_scraper.utils import DataProcessor
@@ -37,9 +36,6 @@ __all__ = [
     "YearAnalysisData",
     # Storage
     "SimplifiedListingsStorage",
-    # Plotting
-    "IndividualListingsPlotter",
-    "YearAnalysisPlotter",
     # Utilities
     "DataProcessor",
 ]
