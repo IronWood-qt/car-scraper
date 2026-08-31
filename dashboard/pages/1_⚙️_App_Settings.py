@@ -19,7 +19,7 @@ DB_PATH = os.environ.get("TARGETS_DB")
 
 st.set_page_config(page_title="App Settings", page_icon="⚙️", layout="wide")
 st.markdown(
-    "<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True
+    "<style>div.block-container{padding-top:0.5rem;}</style>", unsafe_allow_html=True
 )
 st.title("⚙️ App Settings")
 st.caption(

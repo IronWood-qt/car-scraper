@@ -172,10 +172,13 @@ The dashboard is a single-page Streamlit app (plus one sidebar-nav page for
 global settings) built around otomoto's own search UI rather than
 reinventing filter widgets:
 
-- **🚗 Dashboard (home)** — a card grid, one per tracked target: listings
-  count and avg price, with the %-change vs. the previous scrape (green =
-  cheaper, red = pricier). **➕ Add target** at the bottom just takes a
-  label - no URL required up front.
+- **🚗 Dashboard (home)** — a card grid, one per tracked target: a real photo
+  (the cheapest active listing's own thumbnail - swapped in as soon as
+  there's at least one scraped listing with one, otherwise the 🚗 icon),
+  last-scraped date/time, listings count, and avg price with the %-change
+  vs. the previous scrape (green = cheaper, red = pricier, grey when it
+  hasn't moved). **➕ Add target** at the bottom just takes a label - no URL
+  required up front.
 - **A target's page** (click its card) — two tabs:
   - **📊 Overview** — the "🔄 Update now" button, year filter,
     price-over-time / price-vs-mileage charts, and a sortable linked table

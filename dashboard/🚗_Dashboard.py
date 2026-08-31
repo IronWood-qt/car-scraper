@@ -72,7 +72,7 @@ st.set_page_config(page_title="Car Tracker", page_icon="🚗", layout="wide")
 # Streamlit's default block-container top padding leaves a lot of dead space
 # above the title on a wide layout with no page description - trim it.
 st.markdown(
-    "<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True
+    "<style>div.block-container{padding-top:0.5rem;}</style>", unsafe_allow_html=True
 )
 store = open_default_store(DB_PATH)
 
@@ -236,6 +236,24 @@ def _price_stats(key: str) -> dict:
     return {"count": len(df), "avg": avg, "pct": pct}
 
 
+def _target_image(key: str) -> str | None:
+    """One representative photo for a target - the cheapest active listing's
+    otomoto/autoplac thumbnail (real photos scraped from real listings, not
+    a fetched stock photo - no listing has one only for very recent otomoto
+    listings that haven't finished indexing yet)."""
+    if key not in models_with_data():
+        return None
+    df = _active_only(load_model(key))
+    if df.empty or "image_url" not in df.columns:
+        return None
+    df = df[df["image_url"].notna()]
+    if df.empty:
+        return None
+    if "current_price" in df.columns:
+        df = df.sort_values("current_price", na_position="last")
+    return df.iloc[0]["image_url"]
+
+
 def _slugify(label: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", label.strip().lower()).strip("-")
     return slug or "target"
@@ -259,23 +277,37 @@ def _unique_key(base: str) -> str:
 def _render_card(t: dict) -> None:
     key = t["key"]
     with st.container(border=True):
+        img_url = _target_image(key)
+        if img_url:
+            st.image(img_url, width="stretch")
         st.markdown(f"#### {t['label']}")
+        last_updated = (
+            load_metadata(key).get("last_updated", "")
+            if key in models_with_data()
+            else ""
+        )
+        if last_updated:
+            stamp = last_updated[:16].replace("T", " ")
+            st.caption(f"🕓 Last scraped: {stamp}")
         stats = _price_stats(key)
         c1, c2 = st.columns(2)
         c1.metric("Listings", stats["count"])
         if stats["avg"] is not None:
-            # Below ~0.05% is float noise from the mean, not a real move -
-            # leave delta unset so st.metric doesn't paint a colored arrow
-            # over nothing.
             pct = stats["pct"]
-            has_delta = pct is not None and abs(pct) >= 0.05
-            c2.metric(
-                "Avg price",
-                f"{stats['avg']:,.0f} zł",
-                delta=f"{pct:+.1f}%" if has_delta else None,
+            if pct is None:
+                delta, color = None, "off"
+            elif abs(pct) < 0.05:
+                # A real reading but no real move - still show the arrow the
+                # user expects on every card (needs an explicit '+' for
+                # st.metric to draw one at all), just neutral color instead
+                # of a misleading red/green for float noise around zero.
+                delta, color = f"{pct:+.1f}%", "off"
+            else:
                 # A price *drop* is the good news here (see price_drops
                 # alerts) - inverse so down=green, up=red.
-                delta_color="inverse",
+                delta, color = f"{pct:+.1f}%", "inverse"
+            c2.metric(
+                "Avg price", f"{stats['avg']:,.0f} zł", delta=delta, delta_color=color
             )
         else:
             c2.metric("Avg price", "—")
@@ -663,7 +695,13 @@ def _render_detail(t: dict) -> None:
         else:
             st.caption("No otomoto URL yet - add one in the Settings tab.")
 
-    st.title(f"🚗 {t['label']}")
+    img_url = _target_image(t["key"])
+    if img_url:
+        img_col, title_col = st.columns([1, 9], vertical_alignment="center")
+        img_col.image(img_url, width=90)
+        title_col.title(t["label"])
+    else:
+        st.title(f"🚗 {t['label']}")
     overview_tab, settings_tab = st.tabs(["📊 Overview", "⚙️ Settings"])
     with overview_tab:
         _render_overview_tab(t)
