@@ -1,4 +1,17 @@
-# Local interactive dashboard:  docker compose up  ->  http://localhost:8501
+# Full self-hosted stack:  docker compose up  ->  http://localhost:8501
+# (dashboard) + a scraper container running scrape-all on a loop in the
+# background - no host cron needed. See README's "Scheduling" section.
+#
+# One-time setup: `touch targets.db` before first run - Docker creates a
+# *directory* at the mount path if the host file doesn't exist yet, which
+# breaks the bind mount. (`poetry run python main.py targets list` also
+# creates it, auto-migrating targets.json if you still have one.)
+#
+# Optional: copy .env.example to .env to set PUSHOVER_TOKEN/PUSHOVER_USER
+# (alert push notifications) and DASHBOARD_URL (linked from those alerts) -
+# only used as a fallback for whatever isn't set on the dashboard's Settings
+# page (which takes priority and needs no restart to apply). docker compose
+# reads .env automatically; it's gitignored, same as targets.db/data/.
 services:
   dashboard:
     build:
@@ -8,8 +21,58 @@ services:
       - "8501:8501"
     environment:
       DATA_DIR: /data
-      TARGETS_FILE: /app/targets.json
+      TARGETS_DB: /app/targets.db
     volumes:
       - ./data:/data:ro
-      - ./targets.json:/app/targets.json:ro
+      - ./targets.db:/app/targets.db  # read-write: editable from each car's Settings tab
+    restart: unless-stopped
+
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TARGETS_DB: /app/targets.db
+      PUSHOVER_TOKEN: ${PUSHOVER_TOKEN:-}
+      PUSHOVER_USER: ${PUSHOVER_USER:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+    volumes:
+      - ./data:/app/data
+      - ./targets.db:/app/targets.db
+    # Overrides the image's ENTRYPOINT (python main.py) with a plain sleep
+    # loop - simplest possible in-container scheduler, no cron daemon needed
+    # for a single periodic job. Logs go to `docker compose logs -f scraper`.
+    # Interval comes from the Settings page (targets.db), re-read every
+    # cycle - so changing it there takes effect on the *next* sleep without
+    # restarting this container. The sleep is chopped into 15s ticks that
+    # each check trigger_scrape_at (bumped by the dashboard's "Update now"
+    # button) against the value seen at the last scrape - a change breaks
+    # the wait early instead of sitting out the rest of the interval. $$
+    # (not $) for the shell's own vars - a single $ here would have Compose
+    # substitute it at compose-parse time (from .env/host env) instead of
+    # leaving it for the container's shell to expand at run time.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        get_setting() {
+          python -c "from src.settings_store import SettingsStore; print(SettingsStore().get('$$1'))"
+        }
+        last_trigger=0
+        while true; do
+          echo "[$(date -Iseconds)] scrape-all starting"
+          python main.py || echo "[$(date -Iseconds)] scrape-all failed, will retry next cycle"
+          last_trigger=$$(get_setting trigger_scrape_at)
+          interval=$$(get_setting scrape_interval_seconds)
+          echo "[$(date -Iseconds)] sleeping up to $${interval}s (checks for Update-now every 15s)"
+          elapsed=0
+          while [ "$$elapsed" -lt "$$interval" ]; do
+            sleep 15
+            elapsed=$$((elapsed + 15))
+            now_trigger=$$(get_setting trigger_scrape_at)
+            if [ "$$now_trigger" != "$$last_trigger" ]; then
+              echo "[$(date -Iseconds)] Update-now requested, scraping early"
+              break
+            fi
+          done
+        done
     restart: unless-stopped

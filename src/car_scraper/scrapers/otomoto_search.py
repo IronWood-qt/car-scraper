@@ -86,12 +86,18 @@ def _node_to_listing(node: dict) -> dict | None:
         p = params.get(key)
         return p.get("displayValue") if p else None
 
+    image_url = None
+    with contextlib.suppress(KeyError, TypeError):
+        thumb = node.get("thumbnail") or {}
+        image_url = thumb.get("x2") or thumb.get("x1")
+
     return {
         "id": str(listing_id),
         "title": node.get("title", ""),
         "version": disp("version"),
         "short_description": (node.get("shortDescription") or "").strip() or None,
         "url": node.get("url", ""),
+        "image_url": image_url,
         "price": price,
         "year": num("year"),
         "mileage": num("mileage"),

@@ -12,9 +12,7 @@ beautifulsoup4 = "^4.12.0"
 click = "^8.1.0"
 httpx = "^0.25.0"
 pandas = "^2.0.0"
-matplotlib = "^3.6.0"
 lxml = "^4.9.0"
-numpy = "^1.24.0"
 loguru = "^0.7.0"
 pydantic = "^2.0.0"
 
@@ -28,7 +26,7 @@ pre-commit = "^3.4.0"
 bandit = "^1.7.5"
 
 [tool.poetry.scripts]
-car-scraper = "main:cli"
+car-scraper = "main:scrape_all"
 
 # Ruff replaces black + isort + flake8 (+ plugins): one fast linter/formatter.
 [tool.ruff]

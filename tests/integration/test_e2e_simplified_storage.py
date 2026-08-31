@@ -5,9 +5,8 @@ This test covers the complete workflow:
 1. Mock scraping data
 2. Storing data with SimplifiedListingsStorage
 3. Reading data back
-4. Generating plots with both plotters
-5. Data processing operations
-6. Price change tracking over multiple scrape sessions
+4. Data processing operations
+5. Price change tracking over multiple scrape sessions
 """
 
 import json
@@ -18,7 +17,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.car_scraper.plotters import IndividualListingsPlotter, YearAnalysisPlotter
 from src.car_scraper.storage import SimplifiedListingsStorage
 from src.car_scraper.utils import DataProcessor
 
@@ -234,62 +232,6 @@ class TestE2ESimplifiedStorage(unittest.TestCase):
 
         print("✅ Price change tracking test passed")
 
-    def test_04_individual_plots_generation(self):
-        """Test individual listings plot generation."""
-        print("\n=== Testing Individual Plots Generation ===")
-
-        # Store data
-        self.storage.store_listings_data(
-            self.test_model, self.sample_listings_1, "2025-05-31"
-        )
-
-        # Create plotter
-        plotter = IndividualListingsPlotter(str(self.test_data_dir))
-
-        # Generate plots
-        try:
-            plotter.generate_individual_listing_plots(self.test_model)
-            print("✅ Individual plots generated successfully")
-        except Exception as e:
-            self.fail(f"Failed to generate individual plots: {e}")
-
-        # Verify plot file was created
-        plots_dir = self.test_dir / "plots" / self.test_model
-        plot_file = plots_dir / "individual_listings_trends.png"
-        self.assertTrue(
-            plot_file.exists(), "Individual listings plot should be created"
-        )
-
-    def test_05_year_analysis_plots_generation(self):
-        """Test year analysis plot generation."""
-        print("\n=== Testing Year Analysis Plots Generation ===")
-
-        # Store data
-        self.storage.store_listings_data(
-            self.test_model, self.sample_listings_1, "2025-05-31"
-        )
-
-        # Create plotter
-        plotter = YearAnalysisPlotter(str(self.test_data_dir))
-
-        # Generate plots
-        try:
-            plotter.generate_year_analysis_plots(self.test_model)
-            print("✅ Year analysis plots generated successfully")
-        except Exception as e:
-            self.fail(f"Failed to generate year analysis plots: {e}")
-
-        # Verify plot files were created
-        plots_dir = self.test_dir / "plots" / self.test_model
-        expected_plots = [
-            "year_analysis.png",
-            "listings_by_year.png",
-            "price_vs_mileage.png",
-        ]
-        for plot_name in expected_plots:
-            plot_file = plots_dir / plot_name
-            self.assertTrue(plot_file.exists(), f"{plot_name} should be created")
-
     def test_06_data_processor_integration(self):
         """Test DataProcessor integration with simplified storage."""
         print("\n=== Testing DataProcessor Integration ===")
@@ -394,13 +336,6 @@ class TestE2ESimplifiedStorage(unittest.TestCase):
             self.storage.store_listings_data(
                 self.test_model, self.sample_listings_2, "2025-06-01"
             )
-
-            # Generate all plots
-            individual_plotter = IndividualListingsPlotter(str(self.test_data_dir))
-            individual_plotter.generate_individual_listing_plots(self.test_model)
-
-            year_plotter = YearAnalysisPlotter(str(self.test_data_dir))
-            year_plotter.generate_year_analysis_plots(self.test_model)
 
             # Test data processing
             processor = DataProcessor(str(self.test_data_dir))

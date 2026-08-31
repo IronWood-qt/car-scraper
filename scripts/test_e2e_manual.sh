@@ -226,30 +226,6 @@ else:
 "
 check_command "Data processor test"
 
-print_status "Step 8: Test individual plots generation"
-poetry run python -c "
-import sys
-sys.path.insert(0, 'src')
-from car_scraper.plotters.individual_plots import IndividualListingsPlotter
-
-plotter = IndividualListingsPlotter('./data_test_e2e')
-plotter.generate_individual_listing_plots('lexus-lc')
-print('✅ Individual plots generated successfully')
-"
-check_command "Individual plots generation"
-
-print_status "Step 9: Test year analysis plots generation"
-poetry run python -c "
-import sys
-sys.path.insert(0, 'src')
-from car_scraper.plotters.year_analysis_plots import YearAnalysisPlotter
-
-plotter = YearAnalysisPlotter('./data_test_e2e')
-plotter.generate_year_analysis_plots('lexus-lc')
-print('✅ Year analysis plots generated successfully')
-"
-check_command "Year analysis plots generation"
-
 print_status "Step 10: Test data export functionality"
 poetry run python -c "
 import sys
@@ -276,10 +252,6 @@ check_command "Data export functionality"
 print_status "Step 11: Verify output files exist"
 expected_files=(
     "./data_test_e2e/lexus-lc/lexus-lc.json"
-    "./plots/lexus-lc/individual_listings_trends.png"
-    "./plots/lexus-lc/year_analysis.png"
-    "./plots/lexus-lc/listings_by_year.png"
-    "./plots/lexus-lc/price_vs_mileage.png"
     "./data_test_e2e/export_test.csv"
     "./data_test_e2e/export_test.json"
 )
@@ -326,15 +298,9 @@ print(f'✅ Historical data columns: {list(df.columns)}')
 "
 check_command "Data integrity verification"
 
-print_status "Step 13: Test CLI integration (if available)"
-# Test main CLI functionality if it supports simplified storage
-if poetry run python main.py --help | grep -q "plot\|analyze"; then
-    print_status "Testing CLI plotting commands..."
-    # Add CLI plotting tests here if available
-    print_success "CLI commands available"
-else
-    print_warning "CLI plotting commands not available or not detected"
-fi
+print_status "Step 13: Test CLI (main.py scrape-all engine)"
+poetry run python main.py --help > /dev/null
+check_command "CLI help command works"
 
 print_status "Step 14: Performance and memory check"
 poetry run python -c "
@@ -354,17 +320,12 @@ except ImportError:
     print('⚠️  psutil not available, skipping memory tracking')
 
 from car_scraper.storage.simplified_listings import SimplifiedListingsStorage
-from car_scraper.plotters.individual_plots import IndividualListingsPlotter
-from car_scraper.plotters.year_analysis_plots import YearAnalysisPlotter
 
 start_time = time.time()
 
 # Test operations
 storage = SimplifiedListingsStorage('./data_test_e2e')
 df = storage.get_historical_data('lexus-lc')
-
-plotter1 = IndividualListingsPlotter('./data_test_e2e')
-plotter2 = YearAnalysisPlotter('./data_test_e2e')
 
 end_time = time.time()
 
@@ -391,8 +352,6 @@ print_status "Test Summary:"
 echo "✅ Environment setup and dependency installation"
 echo "✅ Test data generation with SimplifiedListingsStorage"
 echo "✅ Data processor integration and status checking"
-echo "✅ Individual plots generation (price trends, etc.)"
-echo "✅ Year analysis plots generation (scatter, analysis, etc.)"
 echo "✅ Data export functionality (CSV and JSON)"
 echo "✅ File output verification"
 echo "✅ Data integrity and price tracking validation"
@@ -400,7 +359,6 @@ echo "✅ Performance and memory usage check"
 echo ""
 print_status "Generated Files:"
 echo "📁 ./data_test_e2e/lexus-lc/lexus-lc.json (simplified storage format)"
-echo "📊 ./plots/lexus-lc/ (4 plot files)"
 echo "💾 ./data_test_e2e/export_test.csv (exported data)"
 echo "💾 ./data_test_e2e/export_test.json (exported data)"
 if [ -d "$BACKUP_DIR" ]; then

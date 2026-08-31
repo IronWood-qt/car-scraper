@@ -23,6 +23,7 @@ EXTRA_FIELDS = (
     "country_label",
     "location",
     "created_at",
+    "image_url",
 )
 
 
@@ -173,12 +174,19 @@ class SimplifiedListingsStorage:
                 if "price_readings" not in existing_listing:
                     existing_listing["price_readings"] = []
 
-                # Check for price change
+                # Record a reading on every successful re-scrape, not just when
+                # the price actually changed - otherwise a listing whose price
+                # never moves only ever keeps its single first-seen reading, so
+                # the price-over-time chart can never show it was confirmed
+                # still listed (a flat line) on any later run. This is what
+                # makes "last scraped 1h ago" actually show up as new points.
+                existing_listing["price_readings"].append(
+                    [current_timestamp, current_price]
+                )
+                existing_listing["current_price"] = current_price
+
                 if current_price != last_price:
                     price_change = current_price - last_price
-                    existing_listing["price_readings"].append(
-                        [current_timestamp, current_price]
-                    )
                     existing_listing["price_change"] = price_change
                     price_changes += 1
 
@@ -194,17 +202,8 @@ class SimplifiedListingsStorage:
                     logger.info(
                         f"Price change detected for {listing_id}: {last_price} → {current_price} ({price_change:+d})"
                     )
-
-                # Always ensure current_price matches the last price reading.
-                # Seed a reading if there was none yet (e.g. migrated old-format
-                # data re-scraped at an unchanged price), so history is never empty.
-                if not existing_listing["price_readings"]:
-                    existing_listing["price_readings"].append(
-                        [current_timestamp, current_price]
-                    )
-                existing_listing["current_price"] = existing_listing["price_readings"][
-                    -1
-                ][1]
+                else:
+                    existing_listing["price_change"] = 0
 
                 updated_data.append(existing_listing)
             else:

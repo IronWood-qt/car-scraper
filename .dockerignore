@@ -1,0 +1,18 @@
+# Keeps the build context small and avoids ever accidentally baking private
+# data into an image, even though the Dockerfiles only COPY specific paths
+# today.
+.git/
+data/
+plots/
+targets.db
+targets.db-wal
+targets.db-shm
+targets.json
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/

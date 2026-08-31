@@ -120,6 +120,15 @@ _DOMESTIC_RX = re.compile(r"krajow|salon polska|pierwszy wlascic|\bpolski\b")
 _IMPORT_FUZZY = ["sprowadzony", "sprowadzona", "importowany"]
 _FUZZY_CUTOFF = 0.86
 
+# Condition markers. otomoto's search-results payload has no structured field
+# for accident/damage status (only the individual advert page does, which
+# this project deliberately doesn't scrape - see otomoto_search.py), so this
+# is text-only and skewed toward what the seller volunteers as a selling
+# point ("bezwypadkowy"). A miss means "not mentioned", not "not damaged".
+_ACCIDENT_FREE_RX = re.compile(r"bezwypadkow")
+_HAD_ACCIDENT_RX = re.compile(r"powypadkow|po wypadku|\bkolizj")
+_DAMAGED_RX = re.compile(r"\buszkodz|do naprawy|na czesci|\brozbit")
+
 
 def _fuzzy_hit(words: list[str], tokens: list[str]) -> bool:
     """True if any token is a difflib close-match to any of ``words``."""
@@ -161,6 +170,27 @@ def _resolve_country(text: str, listing: dict) -> tuple[str, str]:
     if _IMPORT_RX.search(folded) or _fuzzy_hit(_IMPORT_FUZZY, tokens):
         return "Sprowadzone", ""
     return "Polska", "pl"
+
+
+def _resolve_condition(text: str) -> tuple[bool | None, bool | None]:
+    """``(accident_free, damaged)`` from free text - either can be ``None``.
+
+    ``accident_free``: True on "bezwypadkowy", False on an explicit
+    "powypadkowy"/"po wypadku"/"kolizja" marker, else None (not mentioned -
+    NOT evidence the car is accident-free). ``damaged``: True when the car
+    had an accident (implies damage) or on its own marker ("uszkodzony"/"do
+    naprawy"/"rozbity"), else None (never False - absence isn't evidence of
+    no damage either).
+    """
+    folded = _fold(text)
+    accident_free = None
+    if _ACCIDENT_FREE_RX.search(folded):
+        accident_free = True
+    elif _HAD_ACCIDENT_RX.search(folded):
+        accident_free = False
+    had_accident = accident_free is False
+    damaged = True if had_accident or _DAMAGED_RX.search(folded) else None
+    return accident_free, damaged
 
 
 def _kw(*words: str) -> re.Pattern[str]:
@@ -299,11 +329,13 @@ def _classify_from_config(text: str, config: dict) -> dict:
 def classify(model_key: str, listing: dict, config: dict | None = None) -> dict:
     """Return facet values for one listing.
 
-    Always includes ``country`` (display label) + ``flag``. Model-specific
-    ``variant`` / ``body`` / ``trim`` come from ``config`` (a target's
-    ``"facets"`` block in ``targets.json``) when given; otherwise from a
-    hardcoded classifier for the handful of models built in above, if any.
-    Values that can't be determined are ``None`` and simply produce no chip.
+    Always includes ``country`` (display label) + ``flag`` + ``accident_free``
+    + ``damaged`` (all text-derived, see :func:`_resolve_country` /
+    :func:`_resolve_condition`). Model-specific ``variant`` / ``body`` /
+    ``trim`` come from ``config`` (a target's ``"facets"`` block in
+    ``targets.json``) when given; otherwise from a hardcoded classifier for
+    the handful of models built in above, if any. Values that can't be
+    determined are ``None`` and simply produce no chip.
     """
     text = " ".join(
         str(listing.get(k) or "") for k in ("title", "version", "short_description")
@@ -316,6 +348,7 @@ def classify(model_key: str, listing: dict, config: dict | None = None) -> dict:
     label, code = _resolve_country(text, listing)
     facets["country"] = label
     facets["flag"] = country_flag(code)
+    facets["accident_free"], facets["damaged"] = _resolve_condition(text)
     return facets
 
 
@@ -394,7 +427,32 @@ def _selfcheck() -> None:
     u = classify(
         "ford-focus", {"title": "Ford z USA", "country": "d", "country_label": "Niemcy"}
     )
-    assert u == {"country": "Niemcy", "flag": "🇩🇪"}, u
+    assert u == {
+        "country": "Niemcy",
+        "flag": "🇩🇪",
+        "accident_free": None,
+        "damaged": None,
+    }, u
+
+    # Condition: bezwypadkowy -> accident_free True, damaged stays unknown.
+    ok = classify(
+        "ford-focus", {"title": "Ford Focus", "short_description": "Bezwypadkowy!"}
+    )
+    assert ok["accident_free"] is True and ok["damaged"] is None, ok
+
+    # powypadkowy implies both "had an accident" and "damaged".
+    crashed = classify(
+        "ford-focus", {"title": "Ford Focus powypadkowy, do naprawy blacharki"}
+    )
+    assert crashed["accident_free"] is False and crashed["damaged"] is True, crashed
+
+    # uszkodzony alone: damaged, but accident status unstated.
+    dented = classify("ford-focus", {"title": "Ford Focus, uszkodzony zderzak"})
+    assert dented["accident_free"] is None and dented["damaged"] is True, dented
+
+    # Nothing mentioned -> both unknown, not False.
+    unstated = classify("ford-focus", {"title": "Ford Focus 1.6"})
+    assert unstated["accident_free"] is None and unstated["damaged"] is None, unstated
 
     # Config-driven engine (no hardcoded classifier needed): a target's
     # targets.json "facets" block drives variant/trim, matching real otomoto
@@ -429,9 +487,14 @@ def _selfcheck() -> None:
     assert b6["variant"] == "B6" and b6["trim"] == "Ultimate", b6
     assert b5["variant"] == "B5" and b5["trim"] == "Plus", b5
 
-    # Unknown model, no config -> only the shared origin facet, no crash.
-    plain = classify("some-random-model", {"title": "Ford Fiesta 1.0"})
-    assert plain == {"country": "Polska", "flag": "🇵🇱"}, plain
+    # Unknown model, no config -> only the shared universal facets, no crash.
+    unmodeled = classify("some-random-model", {"title": "Ford Fiesta 1.0"})
+    assert unmodeled == {
+        "country": "Polska",
+        "flag": "🇵🇱",
+        "accident_free": None,
+        "damaged": None,
+    }, unmodeled
 
     print("facets self-check OK")
 

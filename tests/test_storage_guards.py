@@ -22,16 +22,19 @@ def test_none_price_does_not_crash():
     assert len(summary["new"]) == 1
 
 
-def test_stable_price_rescrape_keeps_reading():
-    """Re-scraping an unchanged price must not leave price_readings empty."""
+def test_stable_price_rescrape_grows_history():
+    """Re-scraping an unchanged price must still add a reading (a flat line
+    on the price-over-time chart, not silence past the very first scrape) -
+    not just avoid leaving price_readings empty."""
     storage = _storage()
     listings = [{"id": "a", "title": "Car", "price": 100000, "year": 2020}]
     storage.store_listings_data("m", listings, "2025-01-01")
-    # Same price again the next day.
+    # Same price again the next day, and the day after.
     storage.store_listings_data("m", listings, "2025-01-02")
+    storage.store_listings_data("m", listings, "2025-01-03")
     df = storage.get_historical_data("m")
-    assert len(df) == 1
-    assert df["price"].iloc[0] == 100000
+    assert len(df) == 3  # one row per scrape, all at the same price
+    assert (df["price"] == 100000).all()
 
 
 def test_new_then_price_drop_reported():

@@ -1,6 +1,4 @@
 FROM python:3.11-slim
-
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
@@ -12,18 +10,15 @@ RUN apt-get update && apt-get install -y \
 # Install poetry
 RUN pip install poetry
 
-# Copy poetry files
+# Install dependencies only first (better layer caching) - --no-root skips
+# installing this project as a package, since main.py's own sys.path setup
+# is how it finds src/, not a pip install.
 COPY pyproject.toml poetry.lock ./
-
-# Configure poetry: Don't create virtual environment, install dependencies
 RUN poetry config virtualenvs.create false \
-    && poetry install --no-dev
+    && poetry install --without dev --no-root --no-interaction
 
-# Copy source code
+# Now the actual code.
+COPY main.py ./
 COPY src/ ./src/
 
-# Create data directory
-RUN mkdir -p /app/data
-
-# Set the entry point
 ENTRYPOINT ["python", "main.py"]
