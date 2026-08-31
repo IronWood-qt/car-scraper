@@ -106,7 +106,12 @@ class TargetStore:
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        # WAL: readers don't block writers and vice versa (only writer-vs-
+        # writer serializes) - the dashboard and the scraper container can
+        # both have this file open at once (see docker-compose.yml) without
+        # fighting over a single lock the way the default journal mode does.
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         return conn
 

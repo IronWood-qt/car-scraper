@@ -1,9 +1,16 @@
-# Local interactive dashboard:  docker compose up  ->  http://localhost:8501
+# Full self-hosted stack:  docker compose up  ->  http://localhost:8501
+# (dashboard) + a scraper container running scrape-all on a loop in the
+# background - no host cron needed. See README's "Scheduling" section.
 #
 # One-time setup: `touch targets.db` before first run - Docker creates a
 # *directory* at the mount path if the host file doesn't exist yet, which
 # breaks the bind mount. (`poetry run python main.py targets list` also
 # creates it, auto-migrating targets.json if you still have one.)
+#
+# Optional: copy .env.example to .env to set PUSHOVER_TOKEN/PUSHOVER_USER
+# (alert push notifications), DASHBOARD_URL (linked from those alerts), and
+# SCRAPE_INTERVAL_SECONDS (default 6h). docker compose reads .env
+# automatically; it's gitignored, same as targets.db/data/.
 services:
   dashboard:
     build:
@@ -17,4 +24,34 @@ services:
     volumes:
       - ./data:/data:ro
       - ./targets.db:/app/targets.db  # read-write: editable from Manage Targets
+    restart: unless-stopped
+
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TARGETS_DB: /app/targets.db
+      PUSHOVER_TOKEN: ${PUSHOVER_TOKEN:-}
+      PUSHOVER_USER: ${PUSHOVER_USER:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+      SCRAPE_INTERVAL_SECONDS: ${SCRAPE_INTERVAL_SECONDS:-21600}  # 6h
+    volumes:
+      - ./data:/app/data
+      - ./targets.db:/app/targets.db
+    # Overrides the image's ENTRYPOINT (python main.py) with a plain sleep
+    # loop - simplest possible in-container scheduler, no cron daemon needed
+    # for a single periodic job. Logs go to `docker compose logs -f scraper`.
+    # $$ (not $) for the shell's own vars - a single $ here would have Compose
+    # substitute it at compose-parse time (from .env/host env) instead of
+    # leaving it for the container's shell to expand at run time.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "[$(date -Iseconds)] scrape-all starting"
+          python main.py scrape-all --max-pages 5 || echo "[$(date -Iseconds)] scrape-all failed, will retry next cycle"
+          echo "[$(date -Iseconds)] sleeping $${SCRAPE_INTERVAL_SECONDS}s"
+          sleep "$${SCRAPE_INTERVAL_SECONDS}"
+        done
     restart: unless-stopped
