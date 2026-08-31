@@ -33,6 +33,10 @@ _DEFAULTS: dict[str, tuple[Any, type]] = {
     "pushover_token": ("", str),
     "pushover_user": ("", str),
     "dashboard_url": ("", str),
+    # Unix timestamp of the last "Update now" click (dashboard) - the
+    # docker-compose scraper loop polls this to jump the queue instead of
+    # waiting out its full interval. 0 = never requested.
+    "trigger_scrape_at": (0, int),
 }
 
 

@@ -11,7 +11,9 @@ also pages/ for the "Manage Targets" editor.
 
 import json
 import os
+import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -23,13 +25,49 @@ import streamlit as st
 # import ...` resolves regardless of cwd - mirrors main.py's own sys.path
 # setup. Must match dashboard/'s position relative to src/ in the Docker
 # image too (see dashboard/Dockerfile) so this is identical in both places.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.facets import classify  # noqa: E402
+from src.settings_store import SettingsStore  # noqa: E402
 from src.target_store import open_default_store  # noqa: E402
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
 DB_PATH = os.environ.get("TARGETS_DB")  # None -> target_store's own default
+# Only present bare-metal (dashboard/Dockerfile never copies main.py or the
+# scraper package's own dependencies into the dashboard image - see there).
+_MAIN_PY = REPO_ROOT / "main.py"
+
+
+def _trigger_update_now() -> None:
+    """Scrape every tracked target right now (all of them - scrape-all has
+    no per-model mode). Always records the request in Settings so the
+    docker-compose 'scraper' container (a separate, dependency-having
+    container - see docker-compose.yml) can pick it up within ~15s instead
+    of waiting out its full interval; when main.py is right here on disk
+    (bare-metal `./run.sh`), also just runs it directly, synchronously.
+    """
+    SettingsStore(DB_PATH).set("trigger_scrape_at", int(time.time()))
+    if not _MAIN_PY.exists():
+        st.info("Requested - the scraper container will pick this up shortly.")
+        return
+    with st.spinner("Scraping every target..."):
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "."],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        result = subprocess.run(
+            [sys.executable, str(_MAIN_PY)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if result.returncode == 0:
+        st.success("Done.")
+    else:
+        st.error(f"Scrape failed:\n{(result.stderr or result.stdout)[-800:]}")
 
 
 @st.cache_data(ttl=30)
@@ -181,7 +219,15 @@ if last_updated:
     when = _relative_time(last_updated)
     stamp = last_updated[:16].replace("T", " ")
     caption += f"  ·  Last scraped: {stamp}" + (f" ({when})" if when else "")
-st.caption(caption)
+cap_col, btn_col = st.columns([5, 1])
+cap_col.caption(caption)
+if btn_col.button(
+    "🔄 Update now", help="Scrapes every tracked target, not just this one"
+):
+    _trigger_update_now()
+    load_model.clear()
+    load_metadata.clear()
+    st.rerun()
 
 c1, c2, c3, c4 = st.columns(4)
 prices = df["current_price"].dropna()

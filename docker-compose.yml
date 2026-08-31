@@ -44,18 +44,35 @@ services:
     # for a single periodic job. Logs go to `docker compose logs -f scraper`.
     # Interval comes from the Settings page (targets.db), re-read every
     # cycle - so changing it there takes effect on the *next* sleep without
-    # restarting this container. $$ (not $) for the shell's own vars - a
-    # single $ here would have Compose substitute it at compose-parse time
-    # (from .env/host env) instead of leaving it for the container's shell
-    # to expand at run time.
+    # restarting this container. The sleep is chopped into 15s ticks that
+    # each check trigger_scrape_at (bumped by the dashboard's "Update now"
+    # button) against the value seen at the last scrape - a change breaks
+    # the wait early instead of sitting out the rest of the interval. $$
+    # (not $) for the shell's own vars - a single $ here would have Compose
+    # substitute it at compose-parse time (from .env/host env) instead of
+    # leaving it for the container's shell to expand at run time.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        get_setting() {
+          python -c "from src.settings_store import SettingsStore; print(SettingsStore().get('$$1'))"
+        }
+        last_trigger=0
         while true; do
           echo "[$(date -Iseconds)] scrape-all starting"
           python main.py || echo "[$(date -Iseconds)] scrape-all failed, will retry next cycle"
-          INTERVAL=$$(python -c "from src.settings_store import SettingsStore; print(SettingsStore().get('scrape_interval_seconds'))")
-          echo "[$(date -Iseconds)] sleeping $${INTERVAL}s"
-          sleep "$${INTERVAL}"
+          last_trigger=$$(get_setting trigger_scrape_at)
+          interval=$$(get_setting scrape_interval_seconds)
+          echo "[$(date -Iseconds)] sleeping up to $${interval}s (checks for Update-now every 15s)"
+          elapsed=0
+          while [ "$$elapsed" -lt "$$interval" ]; do
+            sleep 15
+            elapsed=$$((elapsed + 15))
+            now_trigger=$$(get_setting trigger_scrape_at)
+            if [ "$$now_trigger" != "$$last_trigger" ]; then
+              echo "[$(date -Iseconds)] Update-now requested, scraping early"
+              break
+            fi
+          done
         done
     restart: unless-stopped

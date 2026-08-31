@@ -65,6 +65,7 @@ def test_all_returns_every_default_when_nothing_set():
         "pushover_token": "",
         "pushover_user": "",
         "dashboard_url": "",
+        "trigger_scrape_at": 0,
     }
 
 
