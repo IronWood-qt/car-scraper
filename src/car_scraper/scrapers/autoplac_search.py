@@ -105,12 +105,19 @@ def _offer_to_listing(item: dict) -> dict | None:
         version = None
 
     city = off.get("city")
+
+    image_url = None
+    photos = item.get("photoList") or []
+    if photos and isinstance(photos[0], dict):
+        image_url = photos[0].get("miniatureUrl") or photos[0].get("url")
+
     return {
         "id": f"autoplac-{offer_id}",  # prefixed so it never collides with otomoto
         "title": off.get("title", ""),
         "version": version,
         "short_description": None,  # not present in the search payload
         "url": url,
+        "image_url": image_url,
         "price": price,
         "year": off.get("productionYear"),
         "mileage": off.get("mileage"),

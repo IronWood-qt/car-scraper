@@ -23,6 +23,7 @@ EXTRA_FIELDS = (
     "country_label",
     "location",
     "created_at",
+    "image_url",
 )
 
 
