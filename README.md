@@ -91,17 +91,7 @@ Each target is, conceptually:
     {"site": "otomoto", "url": "https://www.otomoto.pl/osobowe/<make>/<model>?<filters>"},
     {"site": "autoplac", "url": "https://autoplac.pl/oferty/samochody-osobowe/<make>/<model>?<filters>"}
   ],
-  "note": "optional: what the filters mean, for your own future reference",
-  "facets": {
-    "variant": [
-      {"label": "T8", "keywords": ["t8", "recharge"]},
-      {"label": "B5", "keywords": ["b5"]}
-    ],
-    "trim": [
-      {"label": "Ultimate", "keywords": ["ultimate"]},
-      {"label": "Plus", "keywords": ["plus"]}
-    ]
-  }
+  "note": "optional: what the filters mean, for your own future reference"
 }
 ```
 (that's the JSON *import* shape / roughly what a car's Settings tab fields
@@ -122,18 +112,14 @@ doesn't error, it silently falls back to an unfiltered brand-wide search, so
 **check the result count/listings actually match what you expect** before
 trusting a new URL.
 
-`facets` (optional) is what turns a variant/trim into filter chips on the
-dashboard, entirely from config — no code needed for a new car. Each
-dimension (`variant` / `trim` / `body`, all optional) is an ordered list of
-`{label, keywords}` rules checked top to bottom; the first whose keywords
-appear (whole-word, case-insensitive) in the listing's title/description
-wins, so put more specific labels first. `targets.example.json` has a real,
-working second example (Lexus LC's actual V8/hybrid + trim split, purely as
-config) you can import as-is. A handful of the originally-tracked models
-(Lexus LC, Mazda MX-5, Toyota Supra/GR86) also have their facet logic
-hardcoded in [`facets.py`](src/facets.py) from before this config
-existed — new targets don't need that, a `facets` block covers it; when a
-target has one, it always wins over any hardcoded classifier for that key.
+A target can also carry a `facets` block (`{"variant": [{"label", "keywords"}
+...], "trim": [...], "body": [...]}`, keyword rules matched against the
+listing's title/description) - [`src/facets.py`](src/facets.py) can classify
+against it and `targets.db` will store it, but nothing in the dashboard
+currently reads it back out (no Settings-tab editor, no chips, no table
+column), so there's no supported way to set one short of scripting
+`TargetStore.upsert(..., facets=...)` directly. Origin/condition (see below)
+are unrelated and unaffected - those are always computed, no config needed.
 
 ### Optional: the `TARGETS_JSON` CI secret
 
@@ -195,8 +181,7 @@ reinventing filter widgets:
     title/description and **a miss means "not mentioned," not "confirmed
     undamaged."**
   - **⚙️ Settings** — label, note, source URLs (see [🎯 Tracked
-    targets](#-tracked-targets) above), optional facet-chip rules, and
-    delete.
+    targets](#-tracked-targets) above), and delete.
   - The sidebar also has a **🔗 otomoto** (/autoplac) button per source -
     opens that exact search live on the site, for rebuilding filters or
     just manually browsing the listings yourself.

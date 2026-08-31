@@ -6,7 +6,7 @@ One page, two views, switched via ``st.query_params["car"]`` (no separate
 - No ``car`` param: a grid of cards, one per tracked target (listings count,
   avg price with %-change vs the previous scrape), plus "Add target".
 - ``car=<key>``: that target's page, with an Overview tab (charts/table,
-  same as before) and a Settings tab (label/note/sources/facets/delete).
+  same as before) and a Settings tab (label/note/sources/delete).
   The otomoto/autoplac search URL is pasted in on the Settings tab - build
   it by using the site's own filter UI, then "Go to <site>" in the sidebar
   jumps straight back there to tweak filters and copy a fresh URL.
@@ -50,13 +50,6 @@ DB_PATH = os.environ.get("TARGETS_DB")  # None -> target_store's own default
 # Only present bare-metal (dashboard/Dockerfile never copies main.py or the
 # scraper package's own dependencies into the dashboard image - see there).
 _MAIN_PY = REPO_ROOT / "main.py"
-
-_DIMENSIONS = ("variant", "trim", "body")
-_DIM_LABELS = {
-    "variant": "Variant (e.g. engine/powertrain)",
-    "trim": "Trim",
-    "body": "Body style",
-}
 _COLUMN_LABELS = {
     "internal_id": "ID",
     "title": "Title",
@@ -375,46 +368,31 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
-def _load_editor_state(key: str, existing: dict) -> tuple[str, str]:
-    """Seed this target's row-editor lists into session_state, once per key.
-
-    Returns the (sources_key, facets_key) into st.session_state. Rows carry
-    a stable ``_id`` (not their list index) so add/remove doesn't scramble
-    other rows' widget state across reruns.
+def _load_editor_state(key: str, existing: dict) -> str:
+    """Seed this target's sources row-editor list into session_state, once
+    per key. Returns the session_state key. Rows carry a stable ``_id``
+    (not their list index) so add/remove doesn't scramble other rows'
+    widget state across reruns.
     """
-    sk, fk = f"{key}__sources", f"{key}__facets"
+    sk = f"{key}__sources"
     if sk not in st.session_state:
         raw_sources = existing.get("sources") or [{"site": "", "url": ""}]
         st.session_state[sk] = [
             {"_id": _new_id(), "site": s.get("site", ""), "url": s.get("url", "")}
             for s in raw_sources
         ]
-    if fk not in st.session_state:
-        raw_facets = existing.get("facets") or {}
-        st.session_state[fk] = {
-            dim: [
-                {
-                    "_id": _new_id(),
-                    "label": rule.get("label", ""),
-                    "keywords": ", ".join(rule.get("keywords", [])),
-                }
-                for rule in raw_facets.get(dim, [])
-            ]
-            for dim in _DIMENSIONS
-        }
-    return sk, fk
+    return sk
 
 
-def _reset_editor_state(sk: str, fk: str) -> None:
+def _reset_editor_state(sk: str) -> None:
     st.session_state.pop(sk, None)
-    st.session_state.pop(fk, None)
 
 
 def _sources_editor(sk: str) -> None:
     st.markdown("**Sources**")
     st.caption(
         "One or more otomoto.pl / autoplac.pl search URLs, merged into one data "
-        "file - use the sidebar's 'Go to...' button to (re)build filters on the "
+        "file - use the sidebar's site button to (re)build filters on the "
         "site itself, then paste the URL here."
     )
     rows = st.session_state[sk]
@@ -449,49 +427,6 @@ def _sources_editor(sk: str) -> None:
         st.rerun()
 
 
-def _facets_editor(fk: str) -> None:
-    with st.expander("Facets (optional filter chips)"):
-        st.caption(
-            "Turns a variant/trim/body into a dashboard filter chip - no code "
-            "needed. Rules are checked top to bottom, first keyword match wins, "
-            "so put more specific labels first. Leave a dimension empty to skip it."
-        )
-        for dim in _DIMENSIONS:
-            rows = st.session_state[fk][dim]
-            st.markdown(f"**{_DIM_LABELS[dim]}**")
-            if rows:
-                h1, h2, _ = st.columns([1, 2, 0.4])
-                h1.caption("Label")
-                h2.caption("Keywords (comma-separated)")
-            remove_at = None
-            for i, row in enumerate(rows):
-                c1, c2, c3 = st.columns([1, 2, 0.4])
-                row["label"] = c1.text_input(
-                    "label",
-                    value=row["label"],
-                    key=f"{fk}_{dim}_label_{row['_id']}",
-                    placeholder="T8",
-                    label_visibility="collapsed",
-                )
-                row["keywords"] = c2.text_input(
-                    "keywords",
-                    value=row["keywords"],
-                    key=f"{fk}_{dim}_kw_{row['_id']}",
-                    placeholder="t8, recharge",
-                    label_visibility="collapsed",
-                )
-                if c3.button(
-                    "✕", key=f"{fk}_{dim}_rm_{row['_id']}", help="Remove this rule"
-                ):
-                    remove_at = i
-            if remove_at is not None:
-                rows.pop(remove_at)
-                st.rerun()
-            if st.button(f"➕ Add {dim} rule", key=f"{fk}_{dim}_add"):
-                rows.append({"_id": _new_id(), "label": "", "keywords": ""})
-                st.rerun()
-
-
 def _build_sources(sk: str) -> list:
     out = []
     for row in st.session_state[sk]:
@@ -505,29 +440,14 @@ def _build_sources(sk: str) -> list:
     return out
 
 
-def _build_facets(fk: str):
-    facets: dict = {}
-    for dim in _DIMENSIONS:
-        rules = []
-        for row in st.session_state[fk][dim]:
-            label = row["label"].strip()
-            keywords = [w.strip() for w in row["keywords"].split(",") if w.strip()]
-            if label and keywords:
-                rules.append({"label": label, "keywords": keywords})
-        if rules:
-            facets[dim] = rules
-    return facets or None
-
-
 def _render_settings_tab(t: dict) -> None:
     key = t["key"]
-    sk, fk = _load_editor_state(key, t)
+    sk = _load_editor_state(key, t)
 
     label = st.text_input("Label", value=t["label"], key=f"{key}_label")
     note = st.text_input("Note (optional)", value=t.get("note", ""), key=f"{key}_note")
 
     _sources_editor(sk)
-    _facets_editor(fk)
 
     col1, col2 = st.columns([1, 1])
     if col1.button("💾 Save changes", key=f"{key}_submit", type="primary"):
@@ -537,19 +457,18 @@ def _render_settings_tab(t: dict) -> None:
                 label=label,
                 sources=_build_sources(sk),
                 note=note,
-                facets=_build_facets(fk),
             )
         except TargetStoreError as exc:
             st.error(str(exc))
         else:
-            _reset_editor_state(sk, fk)
+            _reset_editor_state(sk)
             st.cache_data.clear()
             st.success("Saved.")
             st.rerun()
 
     if col2.button("🗑️ Delete target", key=f"{key}_delete"):
         store.delete(key)
-        _reset_editor_state(sk, fk)
+        _reset_editor_state(sk)
         st.cache_data.clear()
         st.query_params.clear()
         st.success(f"Deleted '{key}'.")
