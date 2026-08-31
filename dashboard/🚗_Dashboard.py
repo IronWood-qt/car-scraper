@@ -49,6 +49,35 @@ def _condition_label(accident_free, damaged) -> str:
     return "—"
 
 
+def _relative_time(iso_str: str) -> str:
+    """'3m ago' / '2h ago' / '5d ago' from an ISO timestamp, or '' if unparseable."""
+    try:
+        then = datetime.fromisoformat(iso_str)
+    except (ValueError, TypeError):
+        return ""
+    seconds = (datetime.now() - then).total_seconds()
+    if seconds < 0:
+        return ""
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h ago"
+    return f"{int(seconds // 86400)}d ago"
+
+
+@st.cache_data(ttl=30)
+def load_metadata(key: str) -> dict:
+    """Just the ``metadata`` block (has ``last_updated``) - cheap, no facets work."""
+    f = DATA_DIR / key / f"{key}.json"
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data.get("metadata", {}) if isinstance(data, dict) else {}
+
+
 @st.cache_data(ttl=300)
 def load_model(key: str) -> pd.DataFrame:
     """Load one model's listings into a DataFrame, tagged with facets.
@@ -146,7 +175,14 @@ if df.empty:
     st.info("No listings match the current filters.")
     st.stop()
 
-st.caption(labels.get(key, key))
+last_updated = load_metadata(key).get("last_updated", "")
+caption = labels.get(key, key)
+if last_updated:
+    when = _relative_time(last_updated)
+    stamp = last_updated[:16].replace("T", " ")
+    caption += f"  ·  Last scraped: {stamp}" + (f" ({when})" if when else "")
+st.caption(caption)
+
 c1, c2, c3, c4 = st.columns(4)
 prices = df["current_price"].dropna()
 c1.metric("Listings", len(df))
@@ -195,28 +231,26 @@ if "mileage" in df.columns and df["mileage"].notna().any():
     fig2.update_layout(yaxis_title="PLN", xaxis_title="km")
     right.plotly_chart(fig2, width="stretch")
 
-# Table, cheapest first, with clickable links.
-cols = [
-    c
-    for c in [
-        "internal_id",
-        "title",
-        "year",
-        "mileage",
-        "engine_power",
-        "gearbox",
-        "version",
-        "origin",
-        "condition",
-        "current_price",
-        "url",
-    ]
-    if c in df.columns
-]
-table = df[cols].sort_values("current_price", na_position="last")
-st.dataframe(
-    table,
-    width="stretch",
-    hide_index=True,
-    column_config={"url": st.column_config.LinkColumn("link", display_text="open")},
+# Table, cheapest first, with clickable links and human-readable headers
+# (a raw column_config-less dataframe just shows the JSON field names).
+_COLUMN_LABELS = {
+    "internal_id": "ID",
+    "title": "Title",
+    "year": "Year",
+    "mileage": "Mileage (km)",
+    "engine_power": "Power (KM)",
+    "gearbox": "Gearbox",
+    "version": "Version",
+    "origin": "Origin",
+    "condition": "Condition",
+    "current_price": "Price (PLN)",
+}
+cols = [c for c in _COLUMN_LABELS if c in df.columns] + (
+    ["url"] if "url" in df.columns else []
 )
+table = df[cols].sort_values("current_price", na_position="last")
+column_config = {
+    field: st.column_config.Column(label) for field, label in _COLUMN_LABELS.items()
+}
+column_config["url"] = st.column_config.LinkColumn("Link", display_text="open")
+st.dataframe(table, width="stretch", hide_index=True, column_config=column_config)
