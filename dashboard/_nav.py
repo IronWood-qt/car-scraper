@@ -77,13 +77,13 @@ span[data-testid="stMainMenu"]{display:none;}
     > span:nth-child(2){
     display:none;
 }
-/* stSidebarCollapseButton ("«", inside the sidebar) only had no visible
-   space to render in while width was forced to 0 - now that collapsed
-   has a real width again it reappears, duplicating stExpandSidebarButton
-   ("»", floats in the main content's top-left, outside the sidebar, only
-   while collapsed - see the header-hiding rules above). Keep just one
-   toggle visible: the header's. */
-[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"]{
+/* Two toggle buttons exist: stSidebarCollapseButton (inside the sidebar
+   itself, in stSidebarHeader - visible again now that collapsed has a
+   real width instead of 0) and stExpandSidebarButton (floats over the
+   main content's top-left, outside the sidebar, only while collapsed -
+   see the header-hiding rules above). Keep the one that's actually
+   inside the rail; hide the floating one so there's a single toggle. */
+[data-testid="stExpandSidebarButton"]{
     display:none;
 }
 </style>
