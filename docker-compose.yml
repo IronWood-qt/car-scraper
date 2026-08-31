@@ -24,7 +24,7 @@ services:
       TARGETS_DB: /app/targets.db
     volumes:
       - ./data:/data:ro
-      - ./targets.db:/app/targets.db  # read-write: editable from Manage Targets
+      - ./targets.db:/app/targets.db  # read-write: editable from each car's Settings tab
     restart: unless-stopped
 
   scraper:

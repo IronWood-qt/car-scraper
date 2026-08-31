@@ -1,6 +1,8 @@
-"""Settings: runtime knobs that used to be CLI flags / .env-only, editable
-here instead - stored in targets.db (see src/settings_store.py). Same
-sys.path setup as 🚗_Dashboard.py, see the comment there for why.
+"""App Settings: global runtime knobs that used to be CLI flags / .env-only,
+editable here instead - stored in targets.db (see src/settings_store.py).
+Per-car config (which URLs to scrape, facets) lives on that car's own
+Settings tab in 🚗_Dashboard.py, not here. Same sys.path setup as
+🚗_Dashboard.py, see the comment there for why.
 """
 
 import os
@@ -15,12 +17,14 @@ from src.settings_store import SettingsStore  # noqa: E402
 
 DB_PATH = os.environ.get("TARGETS_DB")
 
-st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
-st.title("⚙️ Settings")
+st.set_page_config(page_title="App Settings", page_icon="⚙️", layout="wide")
+st.title("⚙️ App Settings")
 st.caption(
-    "Stored in targets.db, never committed to git. Most changes apply on the "
-    "next scrape - the scraper container's loop re-reads its interval each "
-    "cycle, no restart needed."
+    "Global scraper/alert config - stored in targets.db, never committed to "
+    "git. Most changes apply on the next scrape - the scraper container's "
+    "loop re-reads its interval each cycle, no restart needed. To add or "
+    "edit which cars are tracked, open a card on the main dashboard and use "
+    "its Settings tab."
 )
 
 store = SettingsStore(DB_PATH)

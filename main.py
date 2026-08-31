@@ -52,7 +52,8 @@ def scrape_all(
     """Scrape every target in targets.db and write an alert summary.
 
     Each target has its own filtered otomoto/autoplac URL so we only track
-    the exact variants we care about (see the dashboard's Manage Targets page).
+    the exact variants we care about (see a target's Settings tab in the
+    dashboard).
     """
     setup_logger(log_level="DEBUG" if verbose else "INFO")
 

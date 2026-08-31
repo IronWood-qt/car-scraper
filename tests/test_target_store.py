@@ -53,6 +53,14 @@ def test_get_missing_key_returns_none():
     assert _store().get("nope") is None
 
 
+def test_upsert_allows_no_sources_yet():
+    """A target can be created before its otomoto URL is pasted in (add on
+    the dashboard, then paste the URL in that car's Settings tab)."""
+    store = _store()
+    store.upsert("k", "Label", sources=[])
+    assert store.get("k")["sources"] == []
+
+
 def test_delete_returns_whether_a_row_was_removed():
     store = _store()
     store.upsert("k", "Label", sources=[{"url": "u"}])
@@ -69,7 +77,6 @@ def test_delete_returns_whether_a_row_was_removed():
             {"key": "Bad Key!", "label": "x", "sources": [{"url": "u"}]},
             "lowercase letters",
         ),
-        ({"key": "k", "label": "x", "sources": []}, "non-empty list"),
         ({"key": "k", "label": "x", "sources": [{"site": "otomoto"}]}, "needs a 'url'"),
         (
             {

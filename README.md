@@ -29,8 +29,9 @@ itself) and you're done.
 ```
 
 Everything else - which cars to track, max pages, Pushover, the scraper's
-schedule - is a page in the dashboard now (🎯 Manage Targets / ⚙️ Settings),
-not a flag here.
+schedule - lives in the dashboard now: add a car from the main grid, paste
+its otomoto/autoplac search URL on that car's own Settings tab, and tune
+global knobs on ⚙️ App Settings. Nothing here is a flag anymore.
 
 ### Docker Compose (recommended for self-hosted/homelab)
 
@@ -57,14 +58,28 @@ never touches git history, on any branch, in this repo or a fork. The
 listings it finds (`data/`) are gitignored too, for the same reason — see
 [🖥️ Dashboards](#️-dashboards).
 
-Manage it entirely from the dashboard's **🎯 Manage Targets** page:
-add/edit/delete, a real form (rows for `sources` and for each `facets`
-rule, not JSON text). `targets.db` is created automatically the first time
-anything touches it. If you have an old `targets.json` lying around from
-before targets.db existed, that first run auto-imports it once - nothing to
-do by hand. Otherwise, [`targets.example.json`](targets.example.json) is a
-real, working file you can import as a starting point (the "Import from a
-JSON file" section on the Manage Targets page) and then edit from there.
+Manage it entirely from the dashboard, no JSON editing required. The flow is
+built around otomoto/autoplac's own search UI instead of reinventing filter
+widgets:
+
+1. Build your search on **otomoto.pl** (or autoplac.pl) directly - brand,
+   model, year, price, whatever - using their filters.
+2. Copy the resulting URL.
+3. On the dashboard's main grid, **➕ Add target** with just a label. It
+   opens straight to that new card's **⚙️ Settings** tab - paste the URL
+   into **Sources** there and save.
+4. From then on, that car's page has a **🔗 Go to otomoto** button in the
+   sidebar - click it any time to re-open the *same* search live, tweak
+   filters, and paste the refreshed URL back into Settings.
+
+`targets.db` is created automatically the first time anything touches it. If
+you have an old `targets.json` lying around from before targets.db existed,
+that first run auto-imports it once - nothing to do by hand. Otherwise,
+[`targets.example.json`](targets.example.json) is a real, working file you
+can bulk-import as a starting point:
+`.venv/bin/python -c "from src.target_store import TargetStore;
+TargetStore().import_json('targets.example.json')"` (after `./run.sh` once
+so `.venv` exists) - then edit each one from the dashboard.
 
 Each target is, conceptually:
 
@@ -89,9 +104,9 @@ Each target is, conceptually:
   }
 }
 ```
-(that's the JSON *import* shape / roughly what the Manage Targets form's
-fields map to - it's stored relationally in `targets.db`, key is the primary
-key, see [`src/target_store.py`](src/target_store.py).)
+(that's the JSON *import* shape / roughly what a car's Settings tab fields
+map to - it's stored relationally in `targets.db`, key is the primary key,
+see [`src/target_store.py`](src/target_store.py).)
 
 `sources` may be a single entry or several — listings from every source are
 merged into one data file per `key`, deduplicated by listing id. `site` is
@@ -153,25 +168,38 @@ Two containers: `dashboard` (the web UI, below) and `scraper` (runs a
 scrape on a loop, keeping `data/` fresh - see [🤖 Scheduling](#-scheduling)).
 Nothing to run on the host, nothing to leave running in a terminal.
 
-The dashboard itself is a Streamlit app with three pages (sidebar nav):
+The dashboard is a single-page Streamlit app (plus one sidebar-nav page for
+global settings) built around otomoto's own search UI rather than
+reinventing filter widgets:
 
-- **🚗 Dashboard** — model/year filters, price-over-time charts, a sortable
-  linked table, reading `data/` straight off disk. Every listing also gets
-  an **origin** (country) and a **condition**
-  (bezwypadkowy/powypadkowy/uszkodzony) column - both text-derived (see
-  [`src/facets.py`](src/facets.py)), no filter widgets for either by design:
-  narrowing what you *track* belongs in the target's search URL, not a
-  runtime filter layered on top of already-scraped data (see "Origin
-  filtering" below) - click a column header to sort instead. otomoto's
-  search results carry no structured accident/damage field (only the
-  individual advert page does, which this project deliberately doesn't
-  scrape), so condition is a text match against the title/description and
-  **a miss means "not mentioned," not "confirmed undamaged."**
-- **🎯 Manage Targets** — add/edit/delete tracked cars, form-based - see [🎯
-  Tracked targets](#-tracked-targets) above.
-- **⚙️ Settings** — max pages per target, the scraper container's loop
+- **🚗 Dashboard (home)** — a card grid, one per tracked target: listings
+  count and avg price, with the %-change vs. the previous scrape (green =
+  cheaper, red = pricier). **➕ Add target** at the bottom just takes a
+  label - no URL required up front.
+- **A target's page** (click its card) — two tabs:
+  - **📊 Overview** — the "🔄 Update now" button, year filter,
+    price-over-time / price-vs-mileage charts, and a sortable linked table
+    reading `data/` straight off disk. Every listing also gets an
+    **origin** (country) and a **condition**
+    (bezwypadkowy/powypadkowy/uszkodzony) column - both text-derived (see
+    [`src/facets.py`](src/facets.py)), no filter widgets for either by
+    design: narrowing what you *track* belongs in the target's search URL,
+    not a runtime filter layered on top of already-scraped data (see
+    "Origin filtering" below) - click a column header to sort instead.
+    otomoto's search results carry no structured accident/damage field
+    (only the individual advert page does, which this project deliberately
+    doesn't scrape), so condition is a text match against the
+    title/description and **a miss means "not mentioned," not "confirmed
+    undamaged."**
+  - **⚙️ Settings** — label, note, source URLs (see [🎯 Tracked
+    targets](#-tracked-targets) above), optional facet-chip rules, and
+    delete.
+  - The sidebar also has a **🔗 Go to otomoto** (/autoplac) button per
+    source - opens that exact search live on the site, for rebuilding
+    filters or just manually browsing the listings yourself.
+- **⚙️ App Settings** — max pages per target, the scraper container's loop
   interval, Pushover credentials, the dashboard URL alerts link to - see
-  below.
+  below. Global, not per-car.
 
 Point the compose volumes at a home server / NAS and it's a permanent,
 private web dashboard on your own network — nothing about what you track or
@@ -186,14 +214,15 @@ already scraped. otomoto: append
 for France, `pl` for Poland, ... - the same codes `src/facets.py`'s
 `_FLAGS` maps to flags); autoplac exposes an equivalent country picker in
 its own UI - copy the resulting URL. Add it straight to the target's source
-URL in Manage Targets, e.g. for USA-only:
+URL on that car's Settings tab, e.g. for USA-only:
 `https://www.otomoto.pl/osobowe/volvo/xc-90/od-2025?search%5Bfilter_enum_country_origin%5D%5B0%5D=usa`
 (verified live: narrows 237 XC90 results down to exactly the USA-imported
 ones).
 
-## ⚙️ Settings
+## ⚙️ App Settings
 
-The dashboard's Settings page, backed by `targets.db` (see
+The dashboard's global App Settings page (not per-car - see [🖥️
+Dashboards](#️-dashboards) above), backed by `targets.db` (see
 [`src/settings_store.py`](src/settings_store.py)):
 
 | Setting | Default | Notes |
@@ -214,7 +243,7 @@ Every scrape that finds a new listing or a price drop can fire two channels:
 
 - **Pushover push notification** — a compact summary (title + up to 5 items
   per section) sent to your phone/desktop via [Pushover](https://pushover.net).
-  Configure via the Settings page (or `PUSHOVER_TOKEN`/`PUSHOVER_USER`, see
+  Configure via the App Settings page (or `PUSHOVER_TOKEN`/`PUSHOVER_USER`, see
   above); unset on both means this silently no-ops. This is the channel that
   actually fits self-hosted use.
 - **GitHub issue** — opens (or comments on) an issue titled **"🚗 Car
@@ -232,7 +261,7 @@ listing as "new" on every run.
 
 `docker compose up` runs the scheduling itself now: alongside `dashboard`, a
 `scraper` container loops a scrape on an interval (default 6h, editable on
-the Settings page - see above), sharing the same `./data` and `./targets.db`
+the App Settings page - see above), sharing the same `./data` and `./targets.db`
 the dashboard reads/edits. No host cron needed; `docker compose logs -f
 scraper` to watch it, `docker compose restart scraper` to force an
 immediate run. It's a plain `while true; sleep` loop (see the `command:` in
@@ -263,10 +292,9 @@ car-scraper/
 │       ├── storage/                # data/*.json persistence + price-history tracking
 │       └── utils/                  # Logging, DataProcessor
 ├── dashboard/                   # Streamlit web UI (standalone container - see dashboard/Dockerfile)
-│   ├── 🚗_Dashboard.py              # Main page: browse listings/charts
+│   ├── 🚗_Dashboard.py              # Card grid (home) + per-car Overview/Settings tabs
 │   └── pages/
-│       ├── 1_🎯_Manage_Targets.py     # Add/edit/delete targets
-│       └── 2_⚙️_Settings.py           # Max pages, scrape interval, Pushover, dashboard URL
+│       └── 1_⚙️_App_Settings.py       # Max pages, scrape interval, Pushover, dashboard URL
 ├── data/                        # Model-specific data storage (gitignored, not committed)
 │   └── {model}/{model}.json        # Unified data file: listings + full price history
 ├── targets.db                   # SQLite: tracked targets + settings (gitignored, not committed)

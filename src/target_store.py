@@ -3,8 +3,8 @@
 Replaces targets.json as the editable source of truth for which cars are
 tracked (and their per-target "facets" classification rules): same private-
 by-default treatment (see .gitignore - targets.db is never committed, in
-this repo or a fork), but editable through the dashboard's "Manage Targets"
-page instead of hand-editing JSON.
+this repo or a fork), but editable through each car's own Settings tab in
+the dashboard instead of hand-editing JSON.
 
 Deliberately dependency-free (stdlib only: sqlite3/json/pathlib) and outside
 the car_scraper package (car_scraper/__init__.py eagerly imports httpx,
@@ -63,9 +63,14 @@ def _validate_key(key: str) -> str:
     return key
 
 
-def _validate_sources(sources: list[dict]) -> list[dict]:
-    if not isinstance(sources, list) or not sources:
-        raise TargetStoreError("sources must be a non-empty list")
+def _validate_sources(sources: list[dict] | None) -> list[dict]:
+    """Empty/missing is fine - a target can exist before its otomoto URL is
+    pasted in (see the dashboard's per-car Settings tab: add the target
+    first, then "Go to otomoto", build filters, and paste the URL back)."""
+    if sources is None:
+        return []
+    if not isinstance(sources, list):
+        raise TargetStoreError("sources must be a list")
     for s in sources:
         if not isinstance(s, dict) or not s.get("url"):
             raise TargetStoreError(f"each source needs a 'url': {s!r}")
