@@ -119,20 +119,23 @@ runner's disk.
 **Self-hosted (recommended)**:
 
 ```bash
-touch targets.db   # first time only - see the docker-compose.yml comment for why
-docker compose up  # -> http://localhost:8501
+touch targets.db          # first time only - see the docker-compose.yml comment for why
+cp .env.example .env      # optional: Pushover creds, scrape interval - see .env.example
+docker compose up         # -> http://localhost:8501
 ```
 
-A Streamlit app with two pages (sidebar nav): the main dashboard (model/year
-filters, price-over-time charts, a sortable linked table, reading `data/`
-straight off disk) and **🎯 Manage Targets** (add/edit/delete tracked cars,
-form-based, backed by `targets.db` - see [🎯 Tracked
-targets](#-tracked-targets) above). Point it at volumes on a home server /
-NAS and it's a permanent, private web dashboard on your own network —
-nothing about what you track or find ever leaves that box. Pair it with a
-scheduler (cron, systemd timer, etc.) running `car-scraper scrape-all`
-periodically to keep `data/` fresh (scraping itself isn't containerized -
-see [🤖 Scheduling](#-scheduling) below).
+Two containers: `dashboard` (the web UI, below) and `scraper` (runs
+`scrape-all` on a loop, keeping `data/` fresh - see [🤖
+Scheduling](#-scheduling)). Nothing to run on the host, nothing to leave
+running in a terminal.
+
+The dashboard itself is a Streamlit app with two pages (sidebar nav): the
+main view (model/year filters, price-over-time charts, a sortable linked
+table, reading `data/` straight off disk) and **🎯 Manage Targets**
+(add/edit/delete tracked cars, form-based, backed by `targets.db` - see [🎯
+Tracked targets](#-tracked-targets) above). Point the compose volumes at a
+home server / NAS and it's a permanent, private web dashboard on your own
+network — nothing about what you track or find ever leaves that box.
 
 Every listing also gets an **origin** (country, from otomoto's structured
 field or free text) and a **condition** (bezwypadkowy/powypadkowy/uszkodzony,
@@ -231,6 +234,10 @@ car-scraper --help
 
 ### Docker
 
+This is the standalone CLI image (`ENTRYPOINT python main.py`) - for the full
+self-hosted stack (dashboard + scheduled scraper together), use `docker
+compose up` instead, see [🖥️ Dashboards](#️-dashboards).
+
 1. **Build the Docker image**:
 ```bash
 docker build -t car-scraper .
@@ -238,7 +245,7 @@ docker build -t car-scraper .
 
 2. **Run with Docker**:
 ```bash
-docker run -v $(pwd)/data:/app/data car-scraper --help
+docker run -v $(pwd)/data:/app/data -v $(pwd)/targets.db:/app/targets.db car-scraper scrape-all
 ```
 
 ## 📖 Usage
@@ -354,22 +361,33 @@ car-scraper/
 │   └── ...                    # Additional models
 ├── tests/                     # Test suite
 ├── .github/workflows/         # GitHub Actions
+├── Dockerfile                  # CLI image (ENTRYPOINT: main.py) - the scraper service uses this
+├── docker-compose.yml          # Full stack: dashboard + scheduled scraper
+├── .env.example                 # Pushover creds / scrape interval - copy to .env
 └── main.py                    # CLI entry point
 ```
 
 ## 🤖 Scheduling
 
-There's no automated daily scraping in this repo anymore (see 🎯 Tracked
+There's no automated daily scraping in GitHub Actions anymore (see 🎯 Tracked
 targets / 🖥️ Dashboards above for why) — `data/` has nowhere private to live
-in GitHub Actions between runs, so a GitHub-hosted schedule would just
-re-report every listing as "new" on every run. Run `car-scraper scrape-all`
-on your own schedule instead, wherever `data/` actually persists:
+there between runs, so a GitHub-hosted schedule would just re-report every
+listing as "new" on every run.
 
-- `docker-compose.yml` only runs the dashboard container (reads `./data`
-  read-only) — scraping itself isn't containerized, so schedule it on the
-  host: a cron job or systemd timer calling `poetry run python main.py
-  scrape-all --max-pages 5` from the repo checkout, writing into the same
-  `./data` the dashboard container mounts.
+`docker compose up` runs the scheduling itself now: alongside `dashboard`, a
+`scraper` container loops `car-scraper scrape-all` on an interval (default 6h,
+`SCRAPE_INTERVAL_SECONDS` in `.env` - see `.env.example`), sharing the same
+`./data` and `./targets.db` the dashboard reads/edits. No host cron needed;
+`docker compose logs -f scraper` to watch it, `docker compose restart
+scraper` to force an immediate run. It's a plain `while true; sleep` loop
+(see the `command:` in `docker-compose.yml`), not a real cron daemon - fine
+for one periodic job, but note a restart of the container resets the wait
+(no persisted "last ran at").
+
+Prefer bare metal, or want a schedule cron actually understands? Skip the
+`scraper` service and use a host cron job / systemd timer calling `poetry
+run python main.py scrape-all --max-pages 5` from the repo checkout instead
+- it writes into the same `./data` the dashboard container mounts either way.
 
 [`daily-scrape.yml`](.github/workflows/daily-scrape.yml) still exists,
 manual-dispatch-only, if you ever want to run it once in GitHub Actions
