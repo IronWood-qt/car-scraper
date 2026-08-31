@@ -69,10 +69,17 @@ _COLUMN_LABELS = {
 }
 
 st.set_page_config(page_title="Car Tracker", page_icon="🚗", layout="wide")
-# Streamlit's default block-container top padding leaves a lot of dead space
-# above the title on a wide layout with no page description - trim it.
+# Streamlit's default block-container top padding leaves dead space above the
+# title on a wide layout with no page description - trim it. The header bar
+# (Deploy button / hamburger menu - meant for Streamlit Community Cloud, not
+# a self-hosted app) is hidden too; its sidebar-collapse control lives in a
+# separate element so this doesn't break that.
 st.markdown(
-    "<style>div.block-container{padding-top:0.5rem;}</style>", unsafe_allow_html=True
+    "<style>"
+    "div.block-container{padding-top:0.5rem;}"
+    "header[data-testid='stHeader']{display:none;}"
+    "</style>",
+    unsafe_allow_html=True,
 )
 store = open_default_store(DB_PATH)
 
